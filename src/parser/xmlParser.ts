@@ -1,5 +1,6 @@
 import { XMLParser } from "fast-xml-parser";
-import { validateXml, ValidationResult, XsdSchemaName } from "./xsdValidator.js";
+import { validateXml, ValidationResult } from "./xsdValidator.js";
+import { XsdSchemaName } from "../xsdPaths.js";
 
 export interface XmlParserOptions {
   /** Disable entity processing for trusted XML to reduce overhead. Default: true (secure). */
