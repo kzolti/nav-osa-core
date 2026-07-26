@@ -143,6 +143,13 @@ The parser rejects XML payloads larger than 10 MB by default. You can override t
 const result = parseXml<InvoiceData>(xmlString, { maxXmlSize: 50 * 1024 * 1024 }); // 50 MB
 ```
 
+## Support
+
+If you find this package useful, consider supporting the development:
+
+- [Buy me a coffee (GitHub Sponsors)](https://github.com/sponsors/kzolti)
+- [Buy me a coffee (Revolut)](https://revolut.me/zoltnifdgo?note=nav-osa-core)
+
 ## License
 
 Apache-2.0
