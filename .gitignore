@@ -1,0 +1,13 @@
+node_modules/
+build/
+dist/
+*.log
+*.tgz
+nav-osa-core-*.tgz
+.env
+.DS_Store
+.idea/
+.vscode/
+*.tsbuildinfo
+package-lock.json
+yarn.lock

@@ -1,0 +1,60 @@
+{
+  "name": "nav-osa-core",
+  "version": "0.0.2",
+  "type": "module",
+  "description": "Shared TypeScript types, XML parser, XSD validator, and XML builder for the Hungarian NAV Online Invoice System (OSA)",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./build/index.d.ts",
+      "import": "./build/index.js",
+      "require": "./build/index.js",
+      "default": "./build/index.js"
+    }
+  },
+  "files": [
+    "build/**/*"
+  ],
+  "scripts": {
+    "build": "tsc && cp -r src/xsd build/xsd",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "nav",
+    "online-invoice",
+    "osa",
+    "hungary",
+    "xml",
+    "xsd",
+    "types",
+    "core"
+  ],
+  "author": "Zoltán István KADA",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kzolti/nav-osa-core.git"
+  },
+  "funding": [
+    {
+      "type": "Buy me a coffee (GitHub)",
+      "url": "https://github.com/sponsors/kzolti"
+    },
+    {
+      "type": "Buy me a coffee (Revolut)",
+      "url": "https://revolut.me/zoltnifdgo?note=nav-osa-core"
+    }
+  ],
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/node": "^24.10.1"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.3.2",
+    "libxml2-wasm": "^0.7.1"
+  }
+}
