@@ -9,8 +9,8 @@ export interface XmlParserOptions {
   maxXmlSize?: number;
   /** Disable XSD validation. Default: true (enabled). */
   validate?: boolean;
-  /** Custom XSD path. If omitted, auto-detected from root element. */
-  xsdPath?: string;
+  /** Schema name for XSD validation. Overrides auto-detection. */
+  schemaName?: XsdSchemaName;
 }
 
 export class XmlValidationError extends Error {
@@ -59,11 +59,10 @@ export async function xmlParser<T>(xmlData: string, options?: XmlParserOptions):
   }
 
   if (options?.validate !== false) {
-    const rootElement = detectRootElement(xmlData);
-    const schemaOrPath = options?.xsdPath ?? resolveSchemaName(rootElement);
-    const result: ValidationResult = await validateXml(xmlData, schemaOrPath);
+    const schema = options?.schemaName ?? resolveSchemaName(detectRootElement(xmlData));
+    const result: ValidationResult = await validateXml(xmlData, schema);
     if (!result.valid) {
-      throw new XmlValidationError(`XSD validation failed against ${schemaOrPath}`, result.errors);
+      throw new XmlValidationError(`XSD validation failed against ${schema}`, result.errors);
     }
   }
 

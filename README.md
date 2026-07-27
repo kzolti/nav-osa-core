@@ -19,8 +19,10 @@ npm install nav-osa-core
 
 ### Types
 
+Types are provided by the separate `nav-osa-types` package:
+
 ```typescript
-import { InvoiceData, TaxNumberType, MonetaryType } from 'nav-osa-core';
+import { InvoiceData, TaxNumberType, MonetaryType } from 'nav-osa-types';
 ```
 
 ### Parse XML
@@ -28,15 +30,18 @@ import { InvoiceData, TaxNumberType, MonetaryType } from 'nav-osa-core';
 By default, `parseXml` validates the XML against the built-in NAV XSD schema before parsing. The schema is auto-detected from the root element:
 
 ```typescript
-import { parseXml, InvoiceData } from 'nav-osa-core';
+import { parseXml } from 'nav-osa-core';
+import { InvoiceData } from 'nav-osa-types';
 
 const result = await parseXml<{ InvoiceData: InvoiceData }>(xmlString);
 ```
 
-You can provide a custom XSD path or disable validation entirely:
+You can explicitly specify the schema by name, or disable validation entirely:
 
 ```typescript
-const result = await parseXml(xmlString, { xsdPath: '/path/to/custom.xsd' });
+import { XsdSchemaName } from 'nav-osa-core';
+
+const result = await parseXml(xmlString, { schemaName: XsdSchemaName.Data });
 const result = await parseXml(xmlString, { validate: false });
 ```
 
@@ -65,18 +70,15 @@ if (!result.valid) {
 }
 ```
 
-Validators are cached by schema name after the first call. For a custom XSD path, pass a file path string instead (no cache):
-
-```typescript
-const result = await validateXml(xmlString, '/path/to/custom.xsd');
-```
+Validators are cached by schema name after the first call.
 
 ### Build invoice XML from JSON
 
 Converts an `InvoiceData` object to XML and validates it against the built-in `data.xsd` schema:
 
 ```typescript
-import { buildInvoiceXml, InvoiceData } from 'nav-osa-core';
+import { buildInvoiceXml } from 'nav-osa-core';
+import { InvoiceData } from 'nav-osa-types';
 
 const invoice: InvoiceData = {
   invoiceNumber: 'ABC-2025-001',
@@ -167,19 +169,31 @@ The `namespacePrefix` option controls which top-level keys receive a namespace p
 
 ## XSD schemas
 
-The module ships the official NAV XSD files:
+The module ships the official NAV XSD files and an enum to reference them:
 
-- `common.xsd` — NTCA Common types
-- `invoiceBase.xsd` — Base invoice types
-- `data.xsd` — Invoice data types
-- `invoiceApi.xsd` — API request/response types
+- `XsdSchemaName.Common` → `common.xsd` — NTCA Common types
+- `XsdSchemaName.InvoiceBase` → `invoiceBase.xsd` — Base invoice types
+- `XsdSchemaName.Data` → `data.xsd` — Invoice data types
+- `XsdSchemaName.InvoiceApi` → `invoiceApi.xsd` — API request/response types
+
+```typescript
+import { validateXml, buildApiRequestXml, XsdSchemaName } from 'nav-osa-core';
+
+// Validate against a named schema
+await validateXml(xmlString, XsdSchemaName.Data);
+
+// Build and validate API request
+await buildApiRequestXml('TokenExchangeRequest', data, XsdSchemaName.InvoiceApi);
+```
 
 ## Security options
 
 The parser processes XML entities by default (`processEntities: true`) to protect against entity expansion attacks. For trusted XML (self-generated documents with no external input), you can disable this to reduce overhead:
 
 ```typescript
-const result = parseXml<InvoiceData>(xmlString, { processEntities: false });
+import { parseXml } from 'nav-osa-core';
+
+const result = await parseXml(xmlString, { processEntities: false });
 ```
 
 **Warning:** Only disable entity processing when parsing XML you fully control. Never use this for external or untrusted input.
@@ -189,7 +203,9 @@ const result = parseXml<InvoiceData>(xmlString, { processEntities: false });
 The parser rejects XML payloads larger than 10 MB by default. You can override this:
 
 ```typescript
-const result = parseXml<InvoiceData>(xmlString, { maxXmlSize: 50 * 1024 * 1024 });
+import { parseXml } from 'nav-osa-core';
+
+const result = await parseXml(xmlString, { maxXmlSize: 50 * 1024 * 1024 });
 ```
 
 ## Security
@@ -197,7 +213,7 @@ const result = parseXml<InvoiceData>(xmlString, { maxXmlSize: 50 * 1024 * 1024 }
 - **Network access disabled** (`NONET`) — XML parsing never fetches external resources, preventing XXE (XML External Entity) attacks.
 - **Entity expansion protection** (`processEntities: true` by default) — guards against billion laughs / exponential entity expansion attacks. Can be disabled for trusted self-generated XML to reduce overhead.
 - **Payload size limit** (`maxXmlSize`: 10 MB by default) — prevents memory exhaustion from oversized XML inputs.
-- **`HUGE` flag** — used **only** when loading the built-in XSD schemas (trusted, shipped with the package). Never applied to user-provided XML or custom schemas.
+- **`HUGE` flag** — used **only** when loading the built-in XSD schemas (trusted, shipped with the package). Never applied to user-provided XML.
 
 ## Support
 

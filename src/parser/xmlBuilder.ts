@@ -1,5 +1,5 @@
 import { XMLBuilder } from "fast-xml-parser";
-import { InvoiceData } from "../types/dataTypes.js";
+import { InvoiceData } from "nav-osa-types";
 import { XsdSchemaName } from "../xsdPaths.js";
 import { validateXml } from "./xsdValidator.js";
 import { XmlValidationError } from "./xmlParser.js";

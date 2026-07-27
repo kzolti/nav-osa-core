@@ -53,24 +53,11 @@ export interface ValidationResult {
   errors: string[];
 }
 
-async function validateXmlWithPath(xmlData: string, xsdPath: string): Promise<ValidationResult> {
+export async function validateXml(xmlData: string, schema: XsdSchemaName): Promise<ValidationResult> {
+  const validator = await getValidator(schema);
   const libxml2 = await getLibxml2();
   let xmlDoc: XmlDocType | null = null;
-  let xsdDoc: XmlDocType | null = null;
-  let validator: XsdValidatorType | null = null;
-
   try {
-    const xsdContent = readFileSync(xsdPath, 'utf8');
-    const absoluteXsdPath = resolve(xsdPath).replace(/\\/g, '/');
-    const xsdUrl = absoluteXsdPath.startsWith('/') ? `file://${absoluteXsdPath}` : `file:///${absoluteXsdPath}`;
-
-    xsdDoc = libxml2.XmlDocument.fromString(xsdContent, {
-      url: xsdUrl,
-      option: libxml2.ParseOption.XML_PARSE_NOBLANKS
-        | libxml2.ParseOption.XML_PARSE_NONET
-        | libxml2.ParseOption.XML_PARSE_HUGE,
-    });
-    validator = libxml2.XsdValidator.fromDoc(xsdDoc);
     xmlDoc = libxml2.XmlDocument.fromString(xmlData, {
       option: libxml2.ParseOption.XML_PARSE_NOBLANKS | libxml2.ParseOption.XML_PARSE_NONET,
     });
@@ -86,36 +73,5 @@ async function validateXmlWithPath(xmlData: string, xsdPath: string): Promise<Va
     return { valid: false, errors };
   } finally {
     xmlDoc?.dispose();
-    validator?.dispose();
-    xsdDoc?.dispose();
   }
-}
-
-export async function validateXml(xmlData: string, schema: XsdSchemaName): Promise<ValidationResult>;
-export async function validateXml(xmlData: string, xsdPath: string): Promise<ValidationResult>;
-export async function validateXml(xmlData: string, schemaOrPath: string): Promise<ValidationResult> {
-  const schemaValue = Object.values(XsdSchemaName).find(v => v === schemaOrPath);
-  if (schemaValue !== undefined) {
-    const validator = await getValidator(schemaValue);
-    const libxml2 = await getLibxml2();
-    let xmlDoc: XmlDocType | null = null;
-    try {
-      xmlDoc = libxml2.XmlDocument.fromString(xmlData, {
-        option: libxml2.ParseOption.XML_PARSE_NOBLANKS | libxml2.ParseOption.XML_PARSE_NONET,
-      });
-      validator.validate(xmlDoc);
-      return { valid: true, errors: [] };
-    } catch (err: unknown) {
-      let errors: string[] = [];
-      if (err instanceof libxml2.XmlValidateError && err.details) {
-        errors = err.details.map((d: { message: string }) => d.message.trim());
-      } else {
-        errors = [err instanceof Error ? err.message : String(err)];
-      }
-      return { valid: false, errors };
-    } finally {
-      xmlDoc?.dispose();
-    }
-  }
-  return validateXmlWithPath(xmlData, schemaOrPath);
 }
