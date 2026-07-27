@@ -4,7 +4,6 @@ Shared TypeScript types, XML parser, XSD validator, and XML builder for the Hung
 
 ## Contents
 
-- TypeScript interfaces generated from the official NAV XSD schemas: `common`, `invoiceBase`, `data`, and `invoiceApi`
 - Generic XML parser built on `fast-xml-parser` configured for NAV XML documents
 - XML builders: `buildInvoiceXml` for invoice data, `buildApiRequestXml` for API request XML
 - XSD validation with built-in lazy validator cache (libxml2-wasm)
@@ -12,7 +11,7 @@ Shared TypeScript types, XML parser, XSD validator, and XML builder for the Hung
 ## Installation
 
 ```bash
-npm install nav-osa-core
+npm install nav-osa-core nav-osa-types
 ```
 
 ## Usage
