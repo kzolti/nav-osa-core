@@ -18,7 +18,14 @@
   ],
   "scripts": {
     "build": "tsc && cp -r src/xsd build/xsd",
-    "test": "tsx test/addNamespacePrefix.test.ts",
+    "test": "node --import tsx --test test/*.test.ts",
+    "test:verbose": "node --import tsx --test --test-reporter=spec test/*.test.ts",
+    "test:snapshots": "node --import tsx --test test/parser-snapshot.test.ts",
+    "test:behavior": "node --import tsx --test test/parser-behavior.test.ts",
+    "test:timing": "node --import tsx --test test/parser-timing.test.ts",
+    "test:xmlequal": "node --import tsx --test test/parser-xmlequal.test.ts",
+    "test:xmlequal:verbose": "node --import tsx --test --test-reporter=spec test/parser-xmlequal.test.ts",
+    "generate-snapshots": "node --import tsx test/generate-snapshots.ts",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -52,6 +59,7 @@
   ],
   "devDependencies": {
     "@types/node": "^24.10.1",
+    "tsx": "^4.23.11",
     "typescript": "^5.9.3"
   },
   "dependencies": {

@@ -11,3 +11,4 @@ nav-osa-core-*.tgz
 *.tsbuildinfo
 package-lock.json
 yarn.lock
+test/snapshots*

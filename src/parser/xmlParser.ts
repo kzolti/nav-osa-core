@@ -155,12 +155,29 @@ export async function xmlParser<T>(xmlData: string, options?: XmlParserOptions):
         "vatCode",
         "countyCode"
       ];
+      const numberFields = [
+        "lineNumber",
+        "lineNumberReference",
+        "modificationIndex",
+        "batchIndex",
+        "engineCapacity",
+        "enginePower",
+        "kms",
+        "length",
+        "sailedHours",
+        "takeOffWeight",
+        "operationHours"
+      ];
 
       if (booleanFields.includes(tagName)) {
         return tagValue === 'true';
       }
       if (stringFields.includes(tagName)) {
         return String(tagValue);
+      }
+      if (numberFields.includes(tagName)) {
+        const num = Number(tagValue);
+        if (!Number.isNaN(num)) return num;
       }
       return tagValue;
     }
