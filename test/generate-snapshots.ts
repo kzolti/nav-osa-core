@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, basename, extname } from "node:path";
-import { xmlParser } from "../src/index.js";
+import { xmlParser, XsdSchemaName } from "../src/index.js";
 import { validateInvoiceData, ValidationError } from "./lib/type-validator.js";
 
 const SAMPLES_DIR = join(import.meta.dirname, "..", "test", "Peldaszamlak_v3.0");
@@ -40,7 +40,7 @@ async function main() {
     let parsed: unknown;
     let parseError: Error | null = null;
     try {
-      parsed = await xmlParser(xml);
+      parsed = await xmlParser(xml, XsdSchemaName.Data);
     } catch (e) {
       parseError = e as Error;
     }

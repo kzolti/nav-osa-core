@@ -2,10 +2,12 @@
 
 Shared TypeScript types, XML parser, XSD validator, and XML builder for the Hungarian NAV Online Invoice System (OSA) version 3.0.
 
+**Hybrid architecture:** parsing is done with `libxml2-wasm` (libxml2 compiled to WebAssembly), building with `fast-xml-builder`.
+
 ## Contents
 
-- Generic XML parser built on `fast-xml-parser` configured for NAV XML documents
-- XML builders: `buildInvoiceXml` for invoice data, `buildApiRequestXml` for API request XML
+- Generic XML parser built on `libxml2-wasm` configured for NAV XML documents
+- XML builders: `buildInvoiceXml` for invoice data, `buildApiRequestXml` for API request XML (built on `fast-xml-builder`)
 - XSD validation with built-in lazy validator cache (libxml2-wasm)
 
 ## Installation
@@ -26,22 +28,14 @@ import { InvoiceData, TaxNumberType, MonetaryType } from 'nav-osa-types';
 
 ### Parse XML
 
-By default, `parseXml` validates the XML against the built-in NAV XSD schema before parsing. The schema is auto-detected from the root element:
+`schemaName` is **required** as the second argument — the XML is validated against that schema before parsing. Validation can be disabled with `validate: false`:
 
 ```typescript
-import { parseXml } from 'nav-osa-core';
+import { parseXml, XsdSchemaName } from 'nav-osa-core';
 import { InvoiceData } from 'nav-osa-types';
 
-const result = await parseXml<{ InvoiceData: InvoiceData }>(xmlString);
-```
-
-You can explicitly specify the schema by name, or disable validation entirely:
-
-```typescript
-import { XsdSchemaName } from 'nav-osa-core';
-
-const result = await parseXml(xmlString, { schemaName: XsdSchemaName.Data });
-const result = await parseXml(xmlString, { validate: false });
+const result = await parseXml<{ InvoiceData: InvoiceData }>(xmlString, XsdSchemaName.Data);
+const resultNoValidation = await parseXml(xmlString, XsdSchemaName.Data, { validate: false });
 ```
 
 If validation fails, a detailed `XmlValidationError` is thrown:
@@ -50,7 +44,7 @@ If validation fails, a detailed `XmlValidationError` is thrown:
 import { XmlValidationError } from 'nav-osa-core';
 
 try {
-  const result = await parseXml(xmlString);
+  const result = await parseXml(xmlString, XsdSchemaName.Data);
 } catch (err) {
   if (err instanceof XmlValidationError) {
     console.log('Validation failed:', err.errors);
@@ -190,9 +184,9 @@ await buildApiRequestXml('TokenExchangeRequest', data, XsdSchemaName.InvoiceApi)
 The parser processes XML entities by default (`processEntities: true`) to protect against entity expansion attacks. For trusted XML (self-generated documents with no external input), you can disable this to reduce overhead:
 
 ```typescript
-import { parseXml } from 'nav-osa-core';
+import { parseXml, XsdSchemaName } from 'nav-osa-core';
 
-const result = await parseXml(xmlString, { processEntities: false });
+const result = await parseXml(xmlString, XsdSchemaName.Data, { processEntities: false });
 ```
 
 **Warning:** Only disable entity processing when parsing XML you fully control. Never use this for external or untrusted input.
@@ -202,9 +196,9 @@ const result = await parseXml(xmlString, { processEntities: false });
 The parser rejects XML payloads larger than 10 MB by default. You can override this:
 
 ```typescript
-import { parseXml } from 'nav-osa-core';
+import { parseXml, XsdSchemaName } from 'nav-osa-core';
 
-const result = await parseXml(xmlString, { maxXmlSize: 50 * 1024 * 1024 });
+const result = await parseXml(xmlString, XsdSchemaName.Data, { maxXmlSize: 50 * 1024 * 1024 });
 ```
 
 ## Security

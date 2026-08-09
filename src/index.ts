@@ -1,6 +1,6 @@
-export { xmlParser, XmlValidationError } from './parser/xmlParser.js';
-export type { XmlParserOptions } from './parser/xmlParser.js';
-export { xmlParser as parseXml } from './parser/xmlParser.js';
+export { xmlParserLibxml2 as xmlParser, xmlParserLibxml2 as parseXml } from './parser/xmlParserLibxml2.js';
+export { XmlValidationError } from './parser/xmlParserLibxml2.js';
+export type { XmlParserOptions } from './parser/xmlParserLibxml2.js';
 export { validateXml } from './parser/xsdValidator.js';
 export type { ValidationResult } from './parser/xsdValidator.js';
 export { XsdSchemaName, getXsdPath } from './xsdPaths.js';

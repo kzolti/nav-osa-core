@@ -1,8 +1,8 @@
-import { XMLBuilder } from "fast-xml-parser";
+import XMLBuilder from "fast-xml-builder";
 import { InvoiceData } from "nav-osa-types";
 import { XsdSchemaName } from "../xsdPaths.js";
 import { validateXml } from "./xsdValidator.js";
-import { XmlValidationError } from "./xmlParser.js";
+import { XmlValidationError } from "./xmlParserCommon.js";
 
 const builder = new XMLBuilder({
   attributeNamePrefix: "@_",
@@ -13,48 +13,54 @@ const builder = new XMLBuilder({
   suppressEmptyNode: false,
 });
 
-const baseElements = new Set([
-  'taxpayerId', 'vatCode', 'countyCode',
-  'simpleAddress', 'detailedAddress',
-  'countryCode', 'region', 'postalCode', 'city',
-  'streetName', 'publicPlaceCategory', 'number', 'building', 'staircase', 'floor', 'door', 'lotNumber',
-  'additionalAddressDetail',
-]);
+const BASE_ELEMENTS_REGEX = new RegExp(
+  `<(/?)(${[
+    'taxpayerId', 'vatCode', 'countyCode',
+    'simpleAddress', 'detailedAddress',
+    'countryCode', 'region', 'postalCode', 'city',
+    'streetName', 'publicPlaceCategory', 'number', 'building', 'staircase', 'floor', 'door', 'lotNumber',
+    'additionalAddressDetail',
+  ].join('|')})([\\s>/])`,
+  'g',
+);
+
+const INVOICE_DATA_NS_REGEX = /(<InvoiceData[^>]*xmlns="http:\/\/schemas.nav.gov.hu\/OSA\/3.0\/data")([^>]*>)/;
 
 function prefixBaseNamespace(xml: string): string {
-  let result = xml;
-  for (const elem of baseElements) {
-    const openPattern = new RegExp(`<${elem}([\\s>/])`, 'g');
-    result = result.replace(openPattern, `<base:${elem}$1`);
-    const closePattern = new RegExp(`</${elem}>`, 'g');
-    result = result.replace(closePattern, `</base:${elem}>`);
-  }
-  return result;
+  return xml.replace(BASE_ELEMENTS_REGEX, '<$1base:$2$3');
 }
 
 function addNamespaceDeclarations(xml: string): string {
   return xml.replace(
-    /(<InvoiceData[^>]*xmlns="http:\/\/schemas.nav.gov.hu\/OSA\/3.0\/data")([^>]*>)/,
+    INVOICE_DATA_NS_REGEX,
     '$1 xmlns:base="http://schemas.nav.gov.hu/OSA/3.0/base"$2',
   );
 }
 
 function stripMetaAttributes(obj: Record<string, unknown>): Record<string, unknown> {
   const clean: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    if (key.startsWith('@_')) continue;
-    if (Array.isArray(value)) {
-      clean[key] = value.map(v => typeof v === 'object' && v !== null ? stripMetaAttributes(v as Record<string, unknown>) : v);
-    } else if (typeof value === 'object' && value !== null) {
-      clean[key] = stripMetaAttributes(value as Record<string, unknown>);
-    } else {
-      clean[key] = value;
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      if (key.startsWith('@_')) continue;
+      const value = obj[key];
+      if (Array.isArray(value)) {
+        clean[key] = value.map(v => typeof v === 'object' && v !== null ? stripMetaAttributes(v as Record<string, unknown>) : v);
+      } else if (typeof value === 'object' && value !== null) {
+        clean[key] = stripMetaAttributes(value as Record<string, unknown>);
+      } else {
+        clean[key] = value;
+      }
     }
   }
   return clean;
 }
 
-export async function buildInvoiceXml(invoiceData: InvoiceData): Promise<string> {
+export interface BuildInvoiceXmlOptions {
+  /** Disable XSD validation after building XML. Default: true (enabled). */
+  validate?: boolean;
+}
+
+export async function buildInvoiceXml(invoiceData: InvoiceData, options?: BuildInvoiceXmlOptions): Promise<string> {
   const xml = builder.build({
     InvoiceData: {
       "@_xmlns": "http://schemas.nav.gov.hu/OSA/3.0/data",
@@ -64,27 +70,27 @@ export async function buildInvoiceXml(invoiceData: InvoiceData): Promise<string>
 
   const prefixedXml = addNamespaceDeclarations(prefixBaseNamespace(xml));
 
-  const result = await validateXml(prefixedXml, XsdSchemaName.Data);
-  if (!result.valid) {
-    throw new XmlValidationError("InvoiceData XSD validation failed", result.errors);
+  if (options?.validate !== false) {
+    const result = await validateXml(prefixedXml, XsdSchemaName.Data);
+    if (!result.valid) {
+      throw new XmlValidationError("InvoiceData XSD validation failed", result.errors);
+    }
   }
 
   return prefixedXml;
 }
 
-export function addNamespacePrefix<T extends object>(
-  obj: T,
-  prefix: string,
-  rootKeys?: string[]
-): T {
-  type ObjMap = Record<string, unknown>;
+type ObjMap = Record<string, unknown>;
 
-  function prefixObject(
-    source: ObjMap,
-    shouldPrefix: boolean,
-  ): ObjMap {
-    const out: ObjMap = {};
-    for (const [key, value] of Object.entries(source)) {
+function prefixObject(
+  source: ObjMap,
+  prefix: string,
+  shouldPrefix: boolean,
+): ObjMap {
+  const out: ObjMap = {};
+  for (const key in source) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      const value = source[key];
       if (key.startsWith("@_") || key === "#text") {
         out[key] = value;
         continue;
@@ -95,45 +101,53 @@ export function addNamespacePrefix<T extends object>(
       if (Array.isArray(value)) {
         out[targetKey] = value.map((item: unknown) => {
           if (typeof item === 'object' && item !== null) {
-            return prefixObject(item as ObjMap, shouldPrefix);
+            return prefixObject(item as ObjMap, prefix, shouldPrefix);
           }
           return item;
         });
       } else if (typeof value === 'object' && value !== null) {
-        out[targetKey] = prefixObject(value as ObjMap, shouldPrefix);
+        out[targetKey] = prefixObject(value as ObjMap, prefix, shouldPrefix);
       } else {
         out[targetKey] = value;
       }
     }
-    return out;
   }
+  return out;
+}
 
-  const entries = Object.entries(obj);
+export function addNamespacePrefix<T extends object>(
+  obj: T,
+  prefix: string,
+  rootKeys?: string[]
+): T {
   const result: ObjMap = {};
 
   if (rootKeys !== undefined) {
     const rootKeySet = new Set(rootKeys);
-    for (const [key, value] of entries) {
-      if (rootKeySet.has(key)) {
-        const prefixedKey = `${prefix}:${key}`;
-        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-          result[prefixedKey] = prefixObject(value as ObjMap, true);
-        } else if (Array.isArray(value)) {
-          result[prefixedKey] = value.map((item: unknown) => {
-            if (typeof item === 'object' && item !== null) {
-              return prefixObject(item as ObjMap, true);
-            }
-            return item;
-          });
+    for (const key in obj as ObjMap) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        const value = (obj as ObjMap)[key];
+        if (rootKeySet.has(key)) {
+          const prefixedKey = `${prefix}:${key}`;
+          if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+            result[prefixedKey] = prefixObject(value as ObjMap, prefix, true);
+          } else if (Array.isArray(value)) {
+            result[prefixedKey] = value.map((item: unknown) => {
+              if (typeof item === 'object' && item !== null) {
+                return prefixObject(item as ObjMap, prefix, true);
+              }
+              return item;
+            });
+          } else {
+            result[prefixedKey] = value;
+          }
         } else {
-          result[prefixedKey] = value;
+          result[key] = value;
         }
-      } else {
-        result[key] = value;
       }
     }
   } else {
-    Object.assign(result, prefixObject(obj as ObjMap, true));
+    Object.assign(result, prefixObject(obj as ObjMap, prefix, true));
   }
 
   return result as unknown as T;
@@ -142,6 +156,8 @@ export function addNamespacePrefix<T extends object>(
 export interface BuildApiRequestXmlOptions {
   namespacePrefix?: string;
   prefixRootKeys?: string[];
+  /** Disable XSD validation after building XML. Default: true (enabled). */
+  validate?: boolean;
 }
 
 export async function buildApiRequestXml<T extends object>(
@@ -164,9 +180,11 @@ export async function buildApiRequestXml<T extends object>(
     [requestType]: dataToBuild,
   });
 
-  const result = await validateXml(xml, schemaType);
-  if (!result.valid) {
-    throw new XmlValidationError(`XSD validation failed for ${requestType}`, result.errors);
+  if (options?.validate !== false) {
+    const result = await validateXml(xml, schemaType);
+    if (!result.valid) {
+      throw new XmlValidationError(`XSD validation failed for ${requestType}`, result.errors);
+    }
   }
 
   return xml;

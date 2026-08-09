@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, basename, extname } from "node:path";
-import { xmlParser } from "../src/index.js";
+import { xmlParser, XsdSchemaName } from "../src/index.js";
 import { validateInvoiceData } from "./lib/type-validator.js";
 
 const SAMPLES_DIR = join(import.meta.dirname, "Peldaszamlak_v3.0");
@@ -22,7 +22,7 @@ describe("xmlParser snapshot regression", () => {
       const baseName = basename(xmlFile, ".xml");
       const snapshotPath = join(SNAPSHOTS_DIR, `${baseName}.json`);
 
-      const result = await xmlParser(xml);
+      const result = await xmlParser(xml, XsdSchemaName.Data);
       const expected = JSON.parse(readFileSync(snapshotPath, "utf8"));
 
       assert.deepEqual(result, expected);
@@ -35,7 +35,7 @@ describe("xmlParser type validation", () => {
     it(`conforms to nav-osa-types: ${xmlFile}`, async () => {
       const xmlPath = join(SAMPLES_DIR, xmlFile);
       const xml = readFileSync(xmlPath, "utf8");
-      const result = await xmlParser(xml);
+      const result = await xmlParser(xml, XsdSchemaName.Data);
 
       const errors = validateInvoiceData(result);
       assert.equal(errors.length, 0, JSON.stringify(errors, null, 2));

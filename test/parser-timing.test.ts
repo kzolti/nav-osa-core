@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, extname } from "node:path";
-import { xmlParser } from "../src/index.js";
+import { xmlParser, XsdSchemaName } from "../src/index.js";
 
 const SAMPLES_DIR = join(import.meta.dirname, "Peldaszamlak_v3.0");
 const TIMING_FILE = join(import.meta.dirname, "snapshots", "timing.json");
@@ -20,7 +20,7 @@ describe("xmlParser timing benchmark", () => {
     for (const xmlFile of xmlFiles) {
       const xml = readFileSync(join(SAMPLES_DIR, xmlFile), "utf8");
       const start = performance.now();
-      await xmlParser(xml);
+      await xmlParser(xml, XsdSchemaName.Data);
       const end = performance.now();
       results.push({ file: xmlFile, durationMs: end - start, valid: true });
     }
