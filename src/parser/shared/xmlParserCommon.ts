@@ -56,6 +56,7 @@ export const BOOLEAN_FIELDS: ReadonlySet<string> = new Set([
   "activityReferred",
   "airCargo",
   "advanceIndicator",
+  "invoiceCheckResult",
 ]);
 
 export const STRING_FIELDS: ReadonlySet<string> = new Set([
