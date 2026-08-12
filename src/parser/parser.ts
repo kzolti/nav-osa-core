@@ -7,7 +7,7 @@ import {
   xmlDocGetRootElement,
   xmlNodeGetContent,
 } from "libxml2-wasm/lib/libxml2.mjs";
-import { ALWAYS_ARRAY, XmlValidationError, assertXmlSize, convertTagValue } from "./shared/xmlParserCommon.js";
+import { ALWAYS_ARRAY, XmlValidationError, assertXmlSize, convertTagValue, MAX_BUILD_DEPTH } from "./shared/xmlParserCommon.js";
 import { ELEMENT_NODE, TEXT_NODE, CDATA_NODE, PARSE_OPTION, xmlDocPtr } from "./parser/wasmConstants.js";
 import type { XmlParserOptions } from "./shared/xmlParserCommon.js";
 
@@ -16,7 +16,10 @@ export type { XmlParserOptions } from "./shared/xmlParserCommon.js";
 
 type XmlNode = Record<string, unknown>;
 
-function convertPtr(ptr: number): unknown {
+function convertPtr(ptr: number, depth = 0): unknown {
+  if (depth > MAX_BUILD_DEPTH) {
+    throw new Error(`XML document too deeply nested (depth > ${MAX_BUILD_DEPTH})`);
+  }
   let text = "";
   let child: number | null = null;
   const childPtrs: number[] = [];
@@ -52,7 +55,7 @@ function convertPtr(ptr: number): unknown {
   if (trimmed !== "") obj["#text"] = trimmed;
   for (const c of childPtrs) {
     const key = XmlTreeCommonStruct.name_(c);
-    const value = convertPtr(c);
+    const value = convertPtr(c, depth + 1);
     const existing = obj[key];
     if (Array.isArray(existing)) {
       existing.push(value);
@@ -103,7 +106,15 @@ export async function xmlParserLibxml2<T>(
     // the guard could be bypassed.
     assertXmlSize(xmlData, options?.maxXmlSize);
     await getLibxml2();
-    xmlDoc = XmlDocument.fromString(xmlData, { option: parseOption });
+    try {
+      xmlDoc = XmlDocument.fromString(xmlData, { option: parseOption });
+    } catch (err: unknown) {
+      throw new XmlValidationError(
+        "XML parse failed (document is not well-formed)",
+        [err instanceof Error ? err.message : String(err)],
+        { cause: err },
+      );
+    }
   }
 
   try {

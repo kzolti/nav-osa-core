@@ -109,8 +109,8 @@ export interface XmlParserOptions {
 
 export class XmlValidationError extends Error {
   public readonly errors: string[];
-  constructor(message: string, errors: string[]) {
-    super(message);
+  constructor(message: string, errors: string[], options?: { cause?: unknown }) {
+    super(message, options);
     this.name = "XmlValidationError";
     this.errors = errors;
   }

@@ -114,12 +114,13 @@ export async function validateXmlAndReturnDoc(
   assertXmlSize(xmlData, maxXmlSize);
   const validator = await getValidator(schema);
   const libxml2 = await getLibxml2();
-  const xmlDoc = libxml2.XmlDocument.fromString(xmlData, { option: parseOption });
+  let xmlDoc: XmlDocType | null = null;
   try {
+    xmlDoc = libxml2.XmlDocument.fromString(xmlData, { option: parseOption });
     validator.validate(xmlDoc);
     return { doc: xmlDoc, errors: [] };
   } catch (err: unknown) {
-    xmlDoc.dispose();
+    xmlDoc?.dispose();
     return { doc: null, errors: extractErrors(err, libxml2) };
   }
 }
