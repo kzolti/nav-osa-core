@@ -1,8 +1,8 @@
 import { XMLParser } from "fast-xml-parser";
-import { validateXml, ValidationResult } from "../../src/parser/xsdValidator.js";
+import { validateXml, ValidationResult } from "../../src/parser/validator.js";
 import { XsdSchemaName } from "../../src/xsdPaths.js";
-import { ALWAYS_ARRAY, XmlValidationError, assertXmlSize, convertTagValue } from "../../src/parser/xmlParserCommon.js";
-import type { XmlParserOptions } from "../../src/parser/xmlParserCommon.js";
+import { ALWAYS_ARRAY, XmlValidationError, assertXmlSize, convertTagValue } from "../../src/parser/shared/xmlParserCommon.js";
+import type { XmlParserOptions } from "../../src/parser/shared/xmlParserCommon.js";
 
 function tagValueProcessor(tagName: string, tagValue: unknown): unknown {
   if (typeof tagValue !== "string") return tagValue;
@@ -51,7 +51,7 @@ export async function xmlParser<T>(
     }
   }
 
-  const parser = options?.processEntities === false ? noEntitiesParser : defaultParser;
+  const parser = options?.processEntities === true ? defaultParser : noEntitiesParser;
   const result = parser.parse(xmlData);
   return result as T;
 }

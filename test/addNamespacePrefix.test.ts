@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { addNamespacePrefix } from '../src/parser/xmlBuilder.js';
+import { addNamespacePrefix } from '../src/parser/builder/namespacePrefix.js';
 
 void describe('addNamespacePrefix', () => {
 

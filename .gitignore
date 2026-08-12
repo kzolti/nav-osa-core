@@ -12,3 +12,5 @@ nav-osa-core-*.tgz
 package-lock.json
 yarn.lock
 test/snapshots*
+bench-results/
+.*/

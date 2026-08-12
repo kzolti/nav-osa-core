@@ -1,19 +1,14 @@
 import { describe, it } from "node:test";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, extname } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { xmlParser, XsdSchemaName } from "../src/index.js";
+import { SAMPLES_DIR, getXmlFiles } from "../test/lib/testFiles.js";
 
-const SAMPLES_DIR = join(import.meta.dirname, "Peldaszamlak_v3.0");
-const TIMING_FILE = join(import.meta.dirname, "snapshots", "timing.json");
-
-function getXmlFiles(): string[] {
-  return readdirSync(SAMPLES_DIR)
-    .filter((f) => extname(f) === ".xml")
-    .sort();
-}
+const TIMING_FILE = join(import.meta.dirname, "..", "test", "snapshots", "timing.json");
 
 describe("xmlParser timing benchmark", () => {
   it("measures parse time for all samples", async () => {
+    console.log("\n================ xmlParser timing (validated, via src/index) ================");
     const xmlFiles = getXmlFiles();
     const results: { file: string; durationMs: number; valid: boolean }[] = [];
 

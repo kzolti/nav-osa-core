@@ -1,21 +1,15 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
-import { join, extname } from "node:path";
-import { xmlParserLibxml2 } from "../src/parser/xmlParserLibxml2.js";
-import { buildInvoiceXmlLibxml2, buildApiRequestXmlLibxml2 } from "../src/parser/xmlBuilderLibxml2.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { xmlParserLibxml2 } from "../src/parser/parser.js";
+import { buildInvoiceXmlLibxml2, buildApiRequestXmlLibxml2 } from "./lib/xmlBuilderLibxml2.js";
 import { xmldiffCheck, isXmldiffAvailable } from "./lib/xmldiff.js";
-import { xmlParser, XmlValidationError, XsdSchemaName } from "../src/index.js";
-import { validateXml } from "../src/parser/xsdValidator.js";
+import { xmlParser, buildInvoiceXml, buildApiRequestXml, XmlBuildError, XmlValidationError, XsdSchemaName, ApiRequestType } from "../src/index.js";
+import { validateXml } from "../src/parser/validator.js";
+import { SAMPLES_DIR, getXmlFiles } from "./lib/testFiles.js";
 
-const SAMPLES_DIR = join(import.meta.dirname, "Peldaszamlak_v3.0");
 const hasXmldiff = isXmldiffAvailable();
-
-function getXmlFiles(): string[] {
-  return readdirSync(SAMPLES_DIR)
-    .filter((f) => extname(f) === ".xml")
-    .sort();
-}
 
 describe("libxml2-wasm XML builder", () => {
   for (const xmlFile of getXmlFiles()) {
@@ -51,8 +45,6 @@ const reLib = await xmlParserLibxml2<any>(built, XsdSchemaName.Data, { validate:
 
 describe("libxml2-wasm API builder", () => {
   const tokenExchangeRequest = {
-    '@_xmlns': 'http://schemas.nav.gov.hu/OSA/3.0/api',
-    '@_xmlns:common': 'http://schemas.nav.gov.hu/NTCA/1.0/common',
     header: {
       requestId: 'RID'.padEnd(30, 'x'),
       timestamp: '2025-01-01T00:00:00.000Z',
@@ -83,10 +75,8 @@ describe("libxml2-wasm API builder", () => {
 
   it("builds valid TokenExchangeRequest with namespaces", async () => {
     const xml = await buildApiRequestXmlLibxml2(
-      'TokenExchangeRequest',
+      ApiRequestType.TokenExchangeRequest,
       tokenExchangeRequest,
-      XsdSchemaName.InvoiceApi,
-      { namespacePrefix: 'common', prefixRootKeys: ['header', 'user'] },
     );
     assert.ok(xml.startsWith("<TokenExchangeRequest"));
     assert.ok(xml.includes('xmlns="http://schemas.nav.gov.hu/OSA/3.0/api"'));
@@ -99,18 +89,17 @@ describe("libxml2-wasm API builder", () => {
     assert.ok(validation.valid, validation.errors.join("\n"));
   });
 
-  it("builds with namespacePrefix + prefixRootKeys", async () => {
+  it("prefixes header and user automatically", async () => {
     const xml = await buildApiRequestXmlLibxml2(
-      'TokenExchangeRequest',
+      ApiRequestType.TokenExchangeRequest,
       tokenExchangeRequest,
-      XsdSchemaName.InvoiceApi,
-      { namespacePrefix: 'common', prefixRootKeys: ['header', 'user'] },
     );
     assert.ok(xml.includes("<common:header>"));
     assert.ok(xml.includes("</common:header>"));
     assert.ok(xml.includes("<common:user>"));
     assert.ok(xml.includes("</common:user>"));
     assert.ok(xml.includes("<software>"));
+    assert.ok(!xml.includes("common:software"));
 
     const validation = await validateXml(xml, XsdSchemaName.InvoiceApi);
     assert.ok(validation.valid, validation.errors.join("\n"));
@@ -119,9 +108,18 @@ describe("libxml2-wasm API builder", () => {
   it("throws XmlValidationError on invalid data", async () => {
     await assert.rejects(
       async () => {
-        await buildApiRequestXmlLibxml2('TokenExchangeRequest', { bad: 'data' }, XsdSchemaName.InvoiceApi);
+        await buildApiRequestXmlLibxml2(ApiRequestType.TokenExchangeRequest, { bad: 'data' });
       },
       (err: unknown) => err instanceof XmlValidationError,
+    );
+  });
+
+  it("throws XmlBuildError on unknown request type", async () => {
+    await assert.rejects(
+      async () => {
+        await buildApiRequestXmlLibxml2('InvalidRoot' as ApiRequestType, {});
+      },
+      (err: unknown) => err instanceof XmlBuildError && /Unknown API request type/.test((err as Error).message),
     );
   });
 });
@@ -141,59 +139,91 @@ if (hasXmldiff) {
   });
 }
 
-describe("libxml2-wasm XML builder vs fxp timing", () => {
-  it("benchmark buildInvoiceXml all samples", async () => {
-    const xmlFiles = getXmlFiles();
-    const iterations = 30;
-    const { buildInvoiceXml } = await import("../src/index.js");
+describe("default builder selection", () => {
+  it("default builder is the fast-xml-builder implementation", async () => {
+    const { buildInvoiceXml, buildApiRequestXml } = await import("../src/index.js");
+    const { buildInvoiceXml: fxpInvoice, buildApiRequestXml: fxpApiRequest } = await import("../src/parser/builder.js");
+    assert.equal(buildInvoiceXml, fxpInvoice);
+    assert.equal(buildApiRequestXml, fxpApiRequest);
+  });
+});
 
-    const parsedSamples: unknown[] = [];
-    for (const xmlFile of xmlFiles) {
-      const xml = readFileSync(join(SAMPLES_DIR, xmlFile), "utf8");
-      parsedSamples.push(await xmlParserLibxml2(xml, XsdSchemaName.Data));
-    }
+describe("production builder invalid input handling", () => {
+  const validBase = {
+    invoiceNumber: "2021/000123",
+    completenessIndicator: false,
+    invoiceIssueDate: "2020-01-01",
+  };
 
-    for (const parsed of parsedSamples) {
-      await buildInvoiceXml(parsed.InvoiceData);
-      await buildInvoiceXmlLibxml2(parsed.InvoiceData);
-      await buildInvoiceXmlLibxml2(parsed.InvoiceData);
-    }
+  it("throws XmlBuildError on circular references instead of a stack overflow", async () => {
+    const circular: Record<string, unknown> = { ...validBase };
+    circular.lines = { line: {} };
+    (circular.lines as Record<string, unknown>).line = circular;
+    await assert.rejects(
+      async () => {
+        await buildInvoiceXml(circular as never);
+      },
+      (err: unknown) => err instanceof XmlBuildError && /Circular reference/.test((err as Error).message),
+    );
+  });
 
-    let fxpTotal = 0;
-    let libxml2Total = 0;
-    let fileIndex = 0;
+  it("throws XmlBuildError with the object path for non-plain objects (Date)", async () => {
+    await assert.rejects(
+      async () => {
+        await buildInvoiceXml({ ...validBase, invoiceIssueDate: new Date() } as never);
+      },
+      (err: unknown) =>
+        err instanceof XmlBuildError &&
+        (err as Error).message.includes("'Date'") &&
+        (err as Error).message.includes("invoiceIssueDate"),
+    );
+  });
 
-    for (const parsed of parsedSamples) {
-      const xmlFile = xmlFiles[fileIndex++];
-      let fxpFile = 0;
-      let libxml2File = 0;
+  it("invalid XML element names are caught by the mandatory validation", async () => {
+    await assert.rejects(
+      async () => {
+        await buildInvoiceXml({ ...validBase, "bad key": "x" } as never);
+      },
+      (err: unknown) => err instanceof XmlValidationError,
+    );
+  });
 
-      for (let i = 0; i < iterations; i++) {
-        if (i === 0) {
-          await buildInvoiceXml(parsed.InvoiceData);
-          await buildInvoiceXmlLibxml2(parsed.InvoiceData);
-          continue;
-        }
-        const t1 = performance.now();
-        await buildInvoiceXml(parsed.InvoiceData);
-        const e1 = performance.now() - t1;
-        fxpTotal += e1;
-        fxpFile += e1;
+  it("skips undefined values and rejects null values via validation", async () => {
+    const xml = readFileSync(join(SAMPLES_DIR, "Belfoldi termekertekesites.xml"), "utf8");
+    const parsed = await xmlParserLibxml2<any>(xml, XsdSchemaName.Data);
+    const withUndefined = { ...parsed.InvoiceData, optionalThing: undefined };
+    const built = await buildInvoiceXml(withUndefined);
+    assert.ok(built.includes("<invoiceNumber>2021/000123</invoiceNumber>"));
+    assert.ok(!built.includes("optionalThing"));
 
-        const t2 = performance.now();
-        await buildInvoiceXmlLibxml2(parsed.InvoiceData);
-        const e2 = performance.now() - t2;
-        libxml2Total += e2;
-        libxml2File += e2;
-      }
+    await assert.rejects(
+      async () => {
+        await buildInvoiceXml({ ...parsed.InvoiceData, alsoNull: null } as never);
+      },
+      (err: unknown) => err instanceof XmlValidationError,
+    );
+  });
 
-const n = iterations - 1;
-      console.log(`  ${xmlFile.padEnd(52)} fxp=${(fxpFile / n).toFixed(4)}ms  libxml2=${(libxml2File / n).toFixed(4)}ms`);
-    }
+  it("accepts null-prototype objects", async () => {
+    const xml = readFileSync(join(SAMPLES_DIR, "Belfoldi termekertekesites.xml"), "utf8");
+    const parsed = await xmlParserLibxml2<any>(xml, XsdSchemaName.Data);
+    const np = Object.assign(Object.create(null), parsed.InvoiceData);
+    const built = await buildInvoiceXml(np);
+    assert.ok(built.includes("<invoiceNumber>2021/000123</invoiceNumber>"));
+  });
 
-    const totalSamples = parsedSamples.length * (iterations - 1);
-    console.log(`\n  fxp builder:    total=${fxpTotal.toFixed(2)}ms  avg=${(fxpTotal / totalSamples).toFixed(4)}ms`);
-    console.log(`  libxml2-wasm:   total=${libxml2Total.toFixed(2)}ms  avg=${(libxml2Total / totalSamples).toFixed(4)}ms`);
-    console.log(`  speedup:        ${(fxpTotal / libxml2Total).toFixed(2)}x`);
+  it("always validates: invalid built XML throws XmlValidationError", async () => {
+    const incomplete = {
+      invoiceNumber: "2021/000123",
+      completenessIndicator: false,
+      invoiceIssueDate: "2020-01-01",
+      missingEverythingElse: "x",
+    };
+    await assert.rejects(
+      async () => {
+        await buildInvoiceXml(incomplete as never);
+      },
+      (err: unknown) => err instanceof XmlValidationError,
+    );
   });
 });

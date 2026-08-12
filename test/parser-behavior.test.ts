@@ -13,6 +13,13 @@ async function parse(file: string) {
 }
 
 describe("xmlParser behavior", () => {
+  it("enforces maxXmlSize even with validate: false", async () => {
+    const big = `<InvoiceData>${"<x/>".repeat(100000)}</InvoiceData>`;
+    await assert.rejects(
+      () => xmlParser(big, XsdSchemaName.Data, { validate: false, maxXmlSize: 1024 }),
+      /XML payload too large/i,
+    );
+  });
   it("removes base: namespace prefix", async () => {
     const r = await parse("Belfoldi termekertekesites.xml");
     const tn = r.InvoiceData.invoiceMain.invoice.invoiceHead.supplierInfo.supplierTaxNumber;
@@ -121,5 +128,21 @@ describe("xmlParser behavior", () => {
     const r = await parse("Tobb szamla modositasa egy okirattal alap 1.xml");
     assert.ok(Array.isArray(r.InvoiceData.invoiceMain.invoice.invoiceLines.line));
     assert.equal(r.InvoiceData.invoiceMain.invoice.invoiceLines.line.length, 1);
+  });
+
+  it("does not expand entity references by default (processEntities off)", async () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE InvoiceData [<!ENTITY zzz "100">]>
+<InvoiceData><supplierInfo><supplierName>&zzz;</supplierName></supplierInfo></InvoiceData>`;
+    const r = await xmlParser(xml, XsdSchemaName.Data, { validate: false });
+    assert.notEqual(r.InvoiceData.supplierInfo.supplierName, "100");
+  });
+
+  it("expands entity references with processEntities: true", async () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE InvoiceData [<!ENTITY zzz "100">]>
+<InvoiceData><supplierInfo><supplierName>&zzz;</supplierName></supplierInfo></InvoiceData>`;
+    const r = await xmlParser(xml, XsdSchemaName.Data, { validate: false, processEntities: true });
+    assert.equal(r.InvoiceData.supplierInfo.supplierName, "100");
   });
 });

@@ -2,6 +2,7 @@ import type { XmlDocument, XsdValidator } from 'libxml2-wasm';
 import { resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { XsdSchemaName, getXsdPath } from '../xsdPaths.js';
+import { assertXmlSize } from './shared/xmlParserCommon.js';
 
 type Libxml2ModuleType = typeof import('libxml2-wasm');
 type XmlDocType = InstanceType<typeof XmlDocument>;
@@ -19,12 +20,16 @@ export async function getLibxml2(): Promise<Libxml2ModuleType> {
     return libxml2Promise;
   }
   libxml2Promise = (async () => {
+    // new Function: bundlers (webpack/vite) would statically resolve the
+    // "libxml2-wasm" import string, breaking the WASM module. The string is
+    // a constant, independent of user input — no eval risk.
     const mod: Libxml2ModuleType = await new Function('return import("libxml2-wasm")')();
     try {
+      // Same reason for importing the nodejs.mjs FS provider.
       const { xmlRegisterFsInputProviders } = await new Function('return import("libxml2-wasm/lib/nodejs.mjs")')();
       xmlRegisterFsInputProviders();
     } catch {
-      // Fallback: FS provider nem elérhető
+      // Fallback: FS provider unavailable
     }
     libxml2Module = mod;
     return mod;
@@ -51,11 +56,16 @@ async function getValidator(schema: XsdSchemaName): Promise<XsdValidatorType> {
         | libxml2.ParseOption.XML_PARSE_NONET
         | libxml2.ParseOption.XML_PARSE_HUGE,
     });
-    // Note: xsdDoc must remain alive in WASM memory while validator is in use.
-    return libxml2.XsdValidator.fromDoc(xsdDoc);
+    try {
+      // Note: xsdDoc must remain alive in WASM memory while validator is in use.
+      return libxml2.XsdValidator.fromDoc(xsdDoc);
+    } catch (err: unknown) {
+      xsdDoc.dispose();
+      throw err;
+    }
   })();
-
   validatorPromiseCache.set(schema, promise);
+  promise.catch(() => validatorPromiseCache.delete(schema));
   return promise;
 }
 
@@ -64,7 +74,15 @@ export interface ValidationResult {
   errors: string[];
 }
 
+function extractErrors(err: unknown, libxml2: Libxml2ModuleType): string[] {
+  if (err instanceof libxml2.XmlValidateError && err.details) {
+    return err.details.map((d: { message: string }) => d.message.trim());
+  }
+  return [err instanceof Error ? err.message : String(err)];
+}
+
 export async function validateXml(xmlData: string, schema: XsdSchemaName): Promise<ValidationResult> {
+  assertXmlSize(xmlData);
   const validator = await getValidator(schema);
   const libxml2 = await getLibxml2();
   let xmlDoc: XmlDocType | null = null;
@@ -75,38 +93,25 @@ export async function validateXml(xmlData: string, schema: XsdSchemaName): Promi
     validator.validate(xmlDoc);
     return { valid: true, errors: [] };
   } catch (err: unknown) {
-    let errors: string[] = [];
-    if (err instanceof libxml2.XmlValidateError && err.details) {
-      errors = err.details.map((d: { message: string }) => d.message.trim());
-    } else {
-      errors = [err instanceof Error ? err.message : String(err)];
-    }
-    return { valid: false, errors };
+    return { valid: false, errors: extractErrors(err, libxml2) };
   } finally {
     xmlDoc?.dispose();
   }
 }
 
 /**
- * Belső warm-up helper: előállítja (és eltárolja) a sémák validátorait,
- * hogy az első validálásnál ne kelljen libxml2 betöltésre + XSD kompilálásra várni.
- * Nem része a publikus API-nak (nem exportált az index.ts-ből).
- */
-export async function preloadValidators(schemas?: XsdSchemaName[]): Promise<void> {
-  const toLoad = schemas ?? (Object.values(XsdSchemaName) as XsdSchemaName[]);
-  await Promise.all(toLoad.map(getValidator));
-}
-
-/**
- * Validálja az XML-t, és sikeres validáció esetén visszaadja a már parse-olt
- * XmlDocument-et — így a hívó fél nem kell újra parse-oljon.
- * A visszaadott XmlDocument tulajdonjoga a hívóé: hívónak kell dispose()-olni!
+ * Validates the XML and, on success, returns the already-parsed
+ * XmlDocument — so the caller does not need to parse twice.
+ * Ownership of the returned XmlDocument is the caller's: it must be
+ * disposed by the caller!
  */
 export async function validateXmlAndReturnDoc(
   xmlData: string,
   schema: XsdSchemaName,
   parseOption: number,
-): Promise<{ doc: XmlDocType; errors: string[] }> {
+  maxXmlSize?: number,
+): Promise<{ doc: XmlDocType | null; errors: string[] }> {
+  assertXmlSize(xmlData, maxXmlSize);
   const validator = await getValidator(schema);
   const libxml2 = await getLibxml2();
   const xmlDoc = libxml2.XmlDocument.fromString(xmlData, { option: parseOption });
@@ -115,12 +120,6 @@ export async function validateXmlAndReturnDoc(
     return { doc: xmlDoc, errors: [] };
   } catch (err: unknown) {
     xmlDoc.dispose();
-    let errors: string[] = [];
-    if (err instanceof libxml2.XmlValidateError && err.details) {
-      errors = err.details.map((d: { message: string }) => d.message.trim());
-    } else {
-      errors = [err instanceof Error ? err.message : String(err)];
-    }
-    return { doc: null as unknown as XmlDocType, errors };
+    return { doc: null, errors: extractErrors(err, libxml2) };
   }
 }

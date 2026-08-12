@@ -1,4 +1,4 @@
-export const ALWAYS_ARRAY = new Set([
+export const ALWAYS_ARRAY: ReadonlySet<string> = new Set([
   "ekaerId",
   "orderNumber",
   "additionalLineData",
@@ -35,7 +35,7 @@ export const ALWAYS_ARRAY = new Set([
   "newCreatedLines",
 ]);
 
-export const BOOLEAN_FIELDS = new Set([
+export const BOOLEAN_FIELDS: ReadonlySet<string> = new Set([
   "completenessIndicator",
   "modifyWithoutMaster",
   "individualExemption",
@@ -58,7 +58,7 @@ export const BOOLEAN_FIELDS = new Set([
   "advanceIndicator",
 ]);
 
-export const STRING_FIELDS = new Set([
+export const STRING_FIELDS: ReadonlySet<string> = new Set([
   "supplierTaxNumber",
   "customerTaxNumber",
   "supplierGroupMemberTaxNumber",
@@ -72,7 +72,7 @@ export const STRING_FIELDS = new Set([
   "countyCode",
 ]);
 
-export const NUMBER_FIELDS = new Set([
+export const NUMBER_FIELDS: ReadonlySet<string> = new Set([
   "lineNumber",
   "lineNumberReference",
   "modificationIndex",
@@ -91,9 +91,10 @@ export function convertTagValue(tagName: string, tagValue: string): string | num
     return tagValue === "true";
   }
   if (STRING_FIELDS.has(tagName)) {
-    return String(tagValue);
+    return tagValue;
   }
   if (NUMBER_FIELDS.has(tagName)) {
+    if (tagValue === "") return tagValue;
     const num = Number(tagValue);
     if (!Number.isNaN(num)) return num;
   }
@@ -115,11 +116,32 @@ export class XmlValidationError extends Error {
   }
 }
 
+/**
+ * Guards against circular references when walking input objects:
+ * real invoices nest ~15 levels, so anything beyond this means the
+ * input is not a tree.
+ */
+export const MAX_BUILD_DEPTH = 500;
+
+/**
+ * Thrown when input data cannot be represented as XML: circular
+ * references, non-JSON values (Date, Map, class instances, functions),
+ * or object attribute values. The message always contains the object
+ * path of the offending value where available.
+ */
+export class XmlBuildError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "XmlBuildError";
+  }
+}
+
 export const DEFAULT_MAX_XML_SIZE = 10 * 1024 * 1024;
 
 export function assertXmlSize(xmlData: string, maxXmlSize?: number): void {
   const limit = maxXmlSize ?? DEFAULT_MAX_XML_SIZE;
-  if (xmlData.length > limit) {
-    throw new Error(`XML payload too large: ${xmlData.length} bytes (max: ${limit})`);
+  const size = Buffer.byteLength(xmlData, "utf8");
+  if (size > limit) {
+    throw new Error(`XML payload too large: ${size} bytes (max: ${limit})`);
   }
 }

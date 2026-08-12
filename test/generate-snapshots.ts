@@ -1,9 +1,9 @@
-import { readdirSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, basename, extname } from "node:path";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join, basename } from "node:path";
 import { xmlParser, XsdSchemaName } from "../src/index.js";
 import { validateInvoiceData, ValidationError } from "./lib/type-validator.js";
+import { SAMPLES_DIR, getXmlFiles } from "./lib/testFiles.js";
 
-const SAMPLES_DIR = join(import.meta.dirname, "..", "test", "Peldaszamlak_v3.0");
 const SNAPSHOTS_DIR = join(import.meta.dirname, "..", "test", "snapshots");
 const TIMING_FILE = join(import.meta.dirname, "..", "test", "snapshots", "timing.json");
 
@@ -12,12 +12,6 @@ interface TimingEntry {
   durationMs: number;
   valid: boolean;
   errors: ValidationError[];
-}
-
-function getXmlFiles(): string[] {
-  return readdirSync(SAMPLES_DIR)
-    .filter((f) => extname(f) === ".xml")
-    .sort();
 }
 
 async function main() {

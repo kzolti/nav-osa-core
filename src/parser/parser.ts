@@ -1,4 +1,4 @@
-import { getLibxml2, validateXmlAndReturnDoc } from "./xsdValidator.js";
+import { getLibxml2, validateXmlAndReturnDoc } from "./validator.js";
 import { XsdSchemaName } from "../xsdPaths.js";
 import { XmlDocument, ParseOption } from "libxml2-wasm";
 import {
@@ -7,15 +7,12 @@ import {
   xmlDocGetRootElement,
   xmlNodeGetContent,
 } from "libxml2-wasm/lib/libxml2.mjs";
-import { ALWAYS_ARRAY, XmlValidationError, assertXmlSize, convertTagValue } from "./xmlParserCommon.js";
-import type { XmlParserOptions } from "./xmlParserCommon.js";
+import { ALWAYS_ARRAY, XmlValidationError, assertXmlSize, convertTagValue } from "./shared/xmlParserCommon.js";
+import { ELEMENT_NODE, TEXT_NODE, CDATA_NODE, PARSE_OPTION, xmlDocPtr } from "./parser/wasmConstants.js";
+import type { XmlParserOptions } from "./shared/xmlParserCommon.js";
 
-export { XmlValidationError } from "./xmlParserCommon.js";
-export type { XmlParserOptions } from "./xmlParserCommon.js";
-
-const ELEMENT_NODE = 1;
-const TEXT_NODE = 3;
-const CDATA_NODE = 4;
+export { XmlValidationError } from "./shared/xmlParserCommon.js";
+export type { XmlParserOptions } from "./shared/xmlParserCommon.js";
 
 type XmlNode = Record<string, unknown>;
 
@@ -84,31 +81,33 @@ export async function xmlParserLibxml2<T>(
   schemaName: XsdSchemaName,
   options?: XmlParserOptions
 ): Promise<T> {
-  assertXmlSize(xmlData, options?.maxXmlSize);
-
   const parseOption =
-    ParseOption.XML_PARSE_NOBLANKS |
-    ParseOption.XML_PARSE_NONET |
-    ParseOption.XML_PARSE_HUGE |
-    (options?.processEntities === false ? 0 : ParseOption.XML_PARSE_NOENT);
+    options?.processEntities === true
+      ? PARSE_OPTION | ParseOption.XML_PARSE_NOENT
+      : PARSE_OPTION;
 
   let xmlDoc: InstanceType<typeof XmlDocument> | null = null;
 
   if (options?.validate !== false) {
-    // Validáció és parse egyetlen menetben: a visszakapott doc-ot újra felhasználjuk,
-    // így nem kell kétszer XmlDocument.fromString()-et hívni ugyanarra az XML-re.
-    const { doc, errors } = await validateXmlAndReturnDoc(xmlData, schemaName, parseOption);
+    const { doc, errors } = await validateXmlAndReturnDoc(xmlData, schemaName, parseOption, options?.maxXmlSize);
     if (errors.length > 0) {
       throw new XmlValidationError(`XSD validation failed against ${schemaName}`, errors);
     }
+    if (!doc) {
+      return {} as T;
+    }
     xmlDoc = doc;
   } else {
+    // validateXmlAndReturnDoc calls assertXmlSize internally; on the
+    // validate:false path the size limit must be enforced here, otherwise
+    // the guard could be bypassed.
+    assertXmlSize(xmlData, options?.maxXmlSize);
     await getLibxml2();
     xmlDoc = XmlDocument.fromString(xmlData, { option: parseOption });
   }
 
   try {
-    const root = xmlDocGetRootElement((xmlDoc as unknown as { _ptr: number })._ptr);
+    const root = xmlDocGetRootElement(xmlDocPtr(xmlDoc));
     if (!root) {
       return {} as T;
     }
@@ -116,6 +115,6 @@ export async function xmlParserLibxml2<T>(
     result[XmlTreeCommonStruct.name_(root)] = convertPtr(root);
     return result as T;
   } finally {
-    xmlDoc.dispose();
+    xmlDoc?.dispose();
   }
 }

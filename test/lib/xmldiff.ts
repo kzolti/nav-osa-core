@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { XMLParser, XMLBuilder } from "fast-xml-parser";
+import { ALWAYS_ARRAY } from "../../src/parser/shared/xmlParserCommon.js";
+import { stripMeta } from "../../src/parser/builder/stripMeta.js";
 
 export function isXmldiffAvailable(): boolean {
   return spawnSync("xmldiff", ["--version"], { encoding: "utf8" }).status === 0;
@@ -17,20 +19,7 @@ const normalizer = new XMLParser({
   trimValues: true,
   ignoreDeclaration: true,
   removeNSPrefix: true,
-  isArray: (name) => {
-    const alwaysArray = [
-      "ekaerId", "orderNumber", "additionalLineData", "line", "productFeeData",
-      "deliveryNote", "shippingDate", "contractNumber", "batchInvoice",
-      "productFeeSummary", "additionalInvoiceData", "productCode",
-      "referenceToOtherLine", "summaryByVatRate", "summarySimplified",
-      "supplierCompanyCode", "customerCompanyCode", "dealerCode", "costCenter",
-      "projectNumber", "generalLedgerAccountNumber", "glnNumber", "materialNumber",
-      "itemNumber", "lineProductFeeContent", "invoiceDigest", "invoiceDigestResult",
-      "processingResult", "technicalValidationMessages", "businessValidationMessages",
-      "taxpayerAddressItem", "transaction", "invoiceChainElement", "newCreatedLines"
-    ];
-    return alwaysArray.includes(name);
-  },
+  isArray: (name) => ALWAYS_ARRAY.has(name),
 });
 
 const builder = new XMLBuilder({
@@ -42,26 +31,11 @@ const builder = new XMLBuilder({
   suppressEmptyNode: false,
 });
 
-function stripMetaAttributes(obj: Record<string, unknown>): Record<string, unknown> {
-  const clean: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    if (key.startsWith("@_")) continue;
-    if (Array.isArray(value)) {
-      clean[key] = value.map(v => typeof v === "object" && v !== null ? stripMetaAttributes(v as Record<string, unknown>) : v);
-    } else if (typeof value === "object" && value !== null) {
-      clean[key] = stripMetaAttributes(value as Record<string, unknown>);
-    } else {
-      clean[key] = value;
-    }
-  }
-  return clean;
-}
-
 function normalizeXml(xml: string): string {
   const parsed = normalizer.parse(xml);
   const rootKey = Object.keys(parsed)[0];
   const data = parsed[rootKey];
-  const cleaned = stripMetaAttributes(data as Record<string, unknown>);
+  const cleaned = stripMeta(data as Record<string, unknown>);
   return builder.build({ [rootKey]: cleaned });
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "nav-osa-core",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Shared TypeScript types, XML parser, XSD validator, and XML builder for the Hungarian NAV Online Invoice System (OSA)",
   "main": "build/index.js",
@@ -9,7 +9,6 @@
     ".": {
       "types": "./build/index.d.ts",
       "import": "./build/index.js",
-      "require": "./build/index.js",
       "default": "./build/index.js"
     }
   },
@@ -17,14 +16,15 @@
     "build/**/*"
   ],
   "scripts": {
-    "build": "tsc && rm -rf build/xsd && cp -r src/xsd build/xsd",
+    "build": "rm -rf build && tsc && cp -r src/xsd build/xsd",
     "test": "node --import tsx --test test/*.test.ts",
     "test:verbose": "node --import tsx --test --test-reporter=spec test/*.test.ts",
     "test:snapshots": "node --import tsx --test test/parser-snapshot.test.ts",
     "test:behavior": "node --import tsx --test test/parser-behavior.test.ts",
-    "test:timing": "node --import tsx --test test/parser-timing.test.ts",
     "test:xmlequal": "node --import tsx --test test/parser-xmlequal.test.ts",
     "test:xmlequal:verbose": "node --import tsx --test --test-reporter=spec test/parser-xmlequal.test.ts",
+    "benchmark": "mkdir -p bench-results && f=bench-results/$(date +%Y-%m-%d_%H-%M-%S).txt; node --import tsx --test bench/*.test.ts > \"$f\" 2>&1; s=$?; tail -n 60 \"$f\"; echo; echo \"Saved to: $f\"; exit $s",
+    "benchmark:timing": "node --import tsx --test bench/parser-timing.test.ts",
     "generate-snapshots": "node --import tsx test/generate-snapshots.ts",
     "prepublishOnly": "npm run build"
   },
@@ -41,7 +41,7 @@
   "author": "Zoltán István KADA",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=20.11.0"
   },
   "repository": {
     "type": "git",

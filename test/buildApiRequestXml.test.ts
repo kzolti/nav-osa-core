@@ -1,10 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildApiRequestXml, XsdSchemaName, XmlValidationError } from '../src/index.js';
+import { buildApiRequestXml, ApiRequestType, XmlBuildError, XmlValidationError } from '../src/index.js';
 
 const tokenExchangeRequest = {
-  '@_xmlns': 'http://schemas.nav.gov.hu/OSA/3.0/api',
-  '@_xmlns:common': 'http://schemas.nav.gov.hu/NTCA/1.0/common',
   header: {
     requestId: 'RID'.padEnd(30, 'x'),
     timestamp: '2025-01-01T00:00:00.000Z',
@@ -35,11 +33,8 @@ const tokenExchangeRequest = {
 
 void describe('buildApiRequestXml', () => {
 
-  void it('builds valid XML with namespacePrefix + prefixRootKeys', async () => {
-    const xml = await buildApiRequestXml('TokenExchangeRequest', tokenExchangeRequest, XsdSchemaName.InvoiceApi, {
-      namespacePrefix: 'common',
-      prefixRootKeys: ['header', 'user'],
-    });
+  void it('prefixes common-namespace subtrees automatically', async () => {
+    const xml = await buildApiRequestXml(ApiRequestType.TokenExchangeRequest, tokenExchangeRequest);
     assert.ok(xml.includes('<TokenExchangeRequest'));
     assert.ok(xml.includes('<common:header>'));
     assert.ok(xml.includes('<common:requestId>'));
@@ -47,13 +42,18 @@ void describe('buildApiRequestXml', () => {
     assert.ok(xml.includes('<software>'));
     assert.ok(!xml.includes('common:software'));
     assert.ok(xml.includes('xmlns="http://schemas.nav.gov.hu/OSA/3.0/api"'));
+    assert.ok(xml.includes('xmlns:common="http://schemas.nav.gov.hu/NTCA/1.0/common"'));
+  });
+
+  void it('injects the API namespace declarations', async () => {
+    const xml = await buildApiRequestXml(ApiRequestType.TokenExchangeRequest, tokenExchangeRequest);
+    assert.ok(xml.startsWith('<TokenExchangeRequest'));
+    assert.ok(xml.indexOf('xmlns="http://schemas.nav.gov.hu/OSA/3.0/api"') !== -1);
+    assert.ok(xml.indexOf('xmlns:common="http://schemas.nav.gov.hu/NTCA/1.0/common"') !== -1);
   });
 
   void it('produces well-formed XML with closing tags', async () => {
-    const xml = await buildApiRequestXml('TokenExchangeRequest', tokenExchangeRequest, XsdSchemaName.InvoiceApi, {
-      namespacePrefix: 'common',
-      prefixRootKeys: ['header', 'user'],
-    });
+    const xml = await buildApiRequestXml(ApiRequestType.TokenExchangeRequest, tokenExchangeRequest);
     assert.ok(xml.startsWith('<TokenExchangeRequest'));
     assert.ok(xml.includes('</TokenExchangeRequest>'));
     assert.ok(xml.includes('<common:header>'));
@@ -67,7 +67,7 @@ void describe('buildApiRequestXml', () => {
   void it('throws XmlValidationError on invalid data structure', async () => {
     await assert.rejects(
       async () => {
-        await buildApiRequestXml('TokenExchangeRequest', { bad: 'data' }, XsdSchemaName.InvoiceApi);
+        await buildApiRequestXml(ApiRequestType.TokenExchangeRequest, { bad: 'data' });
       },
       (err: unknown) => {
         if (err instanceof XmlValidationError) {
@@ -80,25 +80,98 @@ void describe('buildApiRequestXml', () => {
     );
   });
 
-  void it('throws XmlValidationError when required namespace prefix is missing', async () => {
+  void it('throws XmlBuildError on unknown request type', async () => {
     await assert.rejects(
       async () => {
-        await buildApiRequestXml('TokenExchangeRequest', tokenExchangeRequest, XsdSchemaName.InvoiceApi, {
-          namespacePrefix: 'common',
-          prefixRootKeys: [],
-        });
+        await buildApiRequestXml('InvalidRoot' as ApiRequestType, {});
       },
-      XmlValidationError,
+      (err: unknown) => {
+        assert.ok(err instanceof XmlBuildError);
+        assert.match((err as Error).message, /Unknown API request type: 'InvalidRoot'/);
+        return true;
+      },
     );
   });
 
-  void it('throws XmlValidationError on completely wrong data', async () => {
-    await assert.rejects(
-      async () => {
-        await buildApiRequestXml('InvalidRoot', {}, XsdSchemaName.InvoiceApi);
+  void it('builds every API request type', async () => {
+    const base = {
+      header: tokenExchangeRequest.header,
+      user: tokenExchangeRequest.user,
+      software: tokenExchangeRequest.software,
+    };
+    const requests: { type: ApiRequestType; data: object }[] = [
+      { type: ApiRequestType.TokenExchangeRequest, data: {} },
+      {
+        type: ApiRequestType.ManageAnnulmentRequest,
+        data: {
+          exchangeToken: 'token',
+          annulmentOperations: {
+            annulmentOperation: [{ index: 1, annulmentOperation: 'ANNUL', invoiceAnnulment: 'YWJj' }],
+          },
+        },
       },
-      XmlValidationError,
-    );
+      {
+        type: ApiRequestType.ManageInvoiceRequest,
+        data: {
+          exchangeToken: 'token',
+          invoiceOperations: {
+            compressedContent: false,
+            invoiceOperation: [{ index: 1, invoiceOperation: 'CREATE', invoiceData: 'YWJj' }],
+          },
+        },
+      },
+      {
+        type: ApiRequestType.QueryInvoiceChainDigestRequest,
+        data: {
+          page: 1,
+          invoiceChainQuery: { invoiceNumber: 'ABC123', invoiceDirection: 'INBOUND' },
+        },
+      },
+      {
+        type: ApiRequestType.QueryInvoiceCheckRequest,
+        data: {
+          invoiceNumberQuery: { invoiceNumber: 'ABC123', invoiceDirection: 'OUTBOUND' },
+        },
+      },
+      {
+        type: ApiRequestType.QueryInvoiceDataRequest,
+        data: {
+          invoiceNumberQuery: { invoiceNumber: 'ABC123', invoiceDirection: 'OUTBOUND' },
+        },
+      },
+      {
+        type: ApiRequestType.QueryInvoiceDigestRequest,
+        data: {
+          page: 1,
+          invoiceDirection: 'OUTBOUND',
+          invoiceQueryParams: {
+            mandatoryQueryParams: {
+              invoiceIssueDate: { dateFrom: '2025-01-01', dateTo: '2025-01-31' },
+            },
+          },
+        },
+      },
+      {
+        type: ApiRequestType.QueryTaxpayerRequest,
+        data: { taxNumber: '12345678' },
+      },
+      {
+        type: ApiRequestType.QueryTransactionListRequest,
+        data: {
+          page: 1,
+          insDate: { dateTimeFrom: '2025-01-01T00:00:00.000Z', dateTimeTo: '2025-01-31T00:00:00.000Z' },
+        },
+      },
+      {
+        type: ApiRequestType.QueryTransactionStatusRequest,
+        data: { transactionId: 'tid123' },
+      },
+    ];
+    for (const { type, data } of requests) {
+      const xml = await buildApiRequestXml(type, { ...base, ...data });
+      assert.ok(xml.startsWith(`<${type}`), `root of ${type}`);
+      assert.ok(xml.includes(`</${type}>`), `closing tag of ${type}`);
+    }
   });
 
 });
