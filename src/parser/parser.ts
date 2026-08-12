@@ -118,6 +118,9 @@ export async function xmlParserLibxml2<T>(
   }
 
   try {
+    if (!xmlDoc) {
+      return {} as T;
+    }
     const root = xmlDocGetRootElement(xmlDocPtr(xmlDoc));
     if (!root) {
       return {} as T;
