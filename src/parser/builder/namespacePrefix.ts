@@ -16,25 +16,18 @@ function prefixValue(
   }
   if (Array.isArray(value)) {
     return value.map((item, i) => {
-      if (typeof item === "function") {
-        throw new XmlBuildError(
-          `Unsupported value of type 'function' at '${path}[${i}]': expected a plain object`,
-        );
+      if (item === null || typeof item !== "object") {
+        assertPlain(item, `${path}[${i}]`);
+        return item;
       }
-      return item !== null && typeof item === "object"
-        ? prefixValue(item, prefix, shouldPrefix, depth + 1, `${path}[${i}]`)
-        : item;
+      return prefixValue(item, prefix, shouldPrefix, depth + 1, `${path}[${i}]`);
     });
   }
   if (typeof value === "object" && value !== null) {
     assertPlain(value, path);
     return prefixObject(value, prefix, shouldPrefix, depth + 1, path);
   }
-  if (typeof value === "function") {
-    throw new XmlBuildError(
-      `Unsupported value of type 'function' at '${path}': expected a plain object`,
-    );
-  }
+  assertPlain(value, path);
   return value;
 }
 
@@ -50,14 +43,7 @@ function prefixObject(
     if (Object.prototype.hasOwnProperty.call(source, key)) {
       const value = source[key];
       if (key.startsWith("@_") || key === "#text") {
-        if (typeof value === "function") {
-          throw new XmlBuildError(
-            `Unsupported value of type 'function' at '${path}/${key}': expected a plain object`,
-          );
-        }
-        if (typeof value === "object" && value !== null) {
-          assertPlain(value, `${path}/${key}`);
-        }
+        assertPlain(value, `${path}/${key}`);
         out[key] = value;
         continue;
       }
@@ -72,43 +58,40 @@ function prefixObject(
 /**
  * Guards a subtree without copying it: non-rootKey values of an API
  * request are passed through untouched (reference-identical), but every
- * nested value still gets the plain-object/function check.
+ * nested value still gets the plain-object/function check. The depth
+ * guard matches prefixValue — circular input here must not overflow the
+ * stack either.
  */
-function assertSerializableTree(value: unknown, path: string): void {
+function assertSerializableTree(value: unknown, path: string, depth = 0): void {
+  if (depth > MAX_BUILD_DEPTH) {
+    throw new XmlBuildError(
+      `Circular reference or too-deep nesting in API request data (depth > ${MAX_BUILD_DEPTH})`,
+    );
+  }
   if (Array.isArray(value)) {
     for (let i = 0; i < value.length; i++) {
       const item = value[i];
-      if (typeof item === "function") {
-        throw new XmlBuildError(
-          `Unsupported value of type 'function' at '${path}[${i}]': expected a plain object`,
-        );
+      if (item === null || typeof item !== "object") {
+        assertPlain(item, `${path}[${i}]`);
+        continue;
       }
-      if (item !== null && typeof item === "object") {
-        assertSerializableTree(item, `${path}[${i}]`);
-      }
+      assertSerializableTree(item, `${path}[${i}]`, depth + 1);
     }
     return;
   }
-  if (typeof value === "function") {
-    throw new XmlBuildError(
-      `Unsupported value of type 'function' at '${path}': expected a plain object`,
-    );
-  }
   if (typeof value !== "object" || value === null) {
+    assertPlain(value, path);
     return;
   }
   assertPlain(value, path);
   for (const key in value) {
     if (Object.prototype.hasOwnProperty.call(value, key)) {
       const child = (value as ObjMap)[key];
-      if (typeof child === "function") {
-        throw new XmlBuildError(
-          `Unsupported value of type 'function' at '${path}/${key}': expected a plain object`,
-        );
+      if (child === null || typeof child !== "object") {
+        assertPlain(child, `${path}/${key}`);
+        continue;
       }
-      if (child !== null && typeof child === "object") {
-        assertSerializableTree(child, `${path}/${key}`);
-      }
+      assertSerializableTree(child, `${path}/${key}`, depth + 1);
     }
   }
 }

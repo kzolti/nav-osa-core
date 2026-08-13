@@ -28,24 +28,16 @@ export function stripMeta(obj: Node, depth = 0, path = "InvoiceData"): Node {
     if (key.startsWith("@_")) continue;
     if (Array.isArray(value)) {
       clean[key] = value.map((v) => {
-        if (typeof v === "function") {
-          throw new XmlBuildError(`Unsupported value of type 'function' at '${path}/${key}': expected a plain object`);
+        if (v === null || typeof v !== "object") {
+          assertPlain(v, `${path}/${key}`);
+          return v;
         }
-        if (v !== null && typeof v === "object") {
-          const p = `${path}/${key}`;
-          assertPlain(v, p);
-          return stripMeta(v, depth + 1, p);
-        }
-        return v;
+        return stripMeta(v as Node, depth + 1, `${path}/${key}`);
       });
     } else if (typeof value === "object" && value !== null) {
-      const p = `${path}/${key}`;
-      assertPlain(value, p);
-      clean[key] = stripMeta(value, depth + 1, p);
+      clean[key] = stripMeta(value as Node, depth + 1, `${path}/${key}`);
     } else {
-      if (typeof value === "function") {
-        throw new XmlBuildError(`Unsupported value of type 'function' at '${path}/${key}': expected a plain object`);
-      }
+      assertPlain(value, `${path}/${key}`);
       clean[key] = value;
     }
   }

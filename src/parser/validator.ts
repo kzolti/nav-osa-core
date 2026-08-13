@@ -35,7 +35,7 @@ export async function getLibxml2(): Promise<Libxml2ModuleType> {
     return mod;
   })();
   // A failed load must not be cached forever: reset the promise so the
-  // next call retries (same pattern as validatorPromiseCache below).
+  // next call retries (same pattern as getValidator's promise cache).
   libxml2Promise.catch(() => {
     libxml2Promise = null;
   });
