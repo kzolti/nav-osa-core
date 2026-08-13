@@ -1,9 +1,7 @@
-import { MAX_BUILD_DEPTH, XmlBuildError } from "../shared/xmlParserCommon.js";
-
-export type Node = Record<string, unknown>;
+import { MAX_BUILD_DEPTH, XmlBuildError, assertPlain, type Node } from "../shared/xmlParserCommon.js";
 
 /** Elements that belong to the base namespace per the OSA XSD (ala-address, tax number etc.). */
-export const BASE_ELEMENTS = [
+const BASE_ELEMENTS = [
   "taxpayerId", "vatCode", "countyCode",
   "simpleAddress", "detailedAddress",
   "countryCode", "region", "postalCode", "city",
@@ -12,6 +10,8 @@ export const BASE_ELEMENTS = [
 ] as const;
 
 export const baseElements: ReadonlySet<string> = new Set(BASE_ELEMENTS);
+
+export type { Node } from "../shared/xmlParserCommon.js";
 
 /**
  * Recursively removes the meta keys (@_ attributes) while keeping the
@@ -22,32 +22,32 @@ export function stripMeta(obj: Node, depth = 0, path = "InvoiceData"): Node {
   if (depth > MAX_BUILD_DEPTH) {
     throw new XmlBuildError(`Circular reference or too-deep nesting in invoice data near '${path}' (depth > ${MAX_BUILD_DEPTH})`);
   }
+  assertPlain(obj, path);
   const clean: Node = {};
   for (const [key, value] of Object.entries(obj)) {
     if (key.startsWith("@_")) continue;
     if (Array.isArray(value)) {
-      clean[key] = value.map((v) =>
-        v !== null && typeof v === "object" ? stripMeta(assertPlain(v, `${path}/${key}`), depth + 1, `${path}/${key}`) : v,
-      );
+      clean[key] = value.map((v) => {
+        if (typeof v === "function") {
+          throw new XmlBuildError(`Unsupported value of type 'function' at '${path}/${key}': expected a plain object`);
+        }
+        if (v !== null && typeof v === "object") {
+          const p = `${path}/${key}`;
+          assertPlain(v, p);
+          return stripMeta(v, depth + 1, p);
+        }
+        return v;
+      });
     } else if (typeof value === "object" && value !== null) {
-      clean[key] = stripMeta(assertPlain(value, `${path}/${key}`), depth + 1, `${path}/${key}`);
+      const p = `${path}/${key}`;
+      assertPlain(value, p);
+      clean[key] = stripMeta(value, depth + 1, p);
     } else {
+      if (typeof value === "function") {
+        throw new XmlBuildError(`Unsupported value of type 'function' at '${path}/${key}': expected a plain object`);
+      }
       clean[key] = value;
     }
   }
   return clean;
-}
-
-/**
- * A Date, Map, Set or class instance cannot be serialized to element
- * content — rejecting it here (instead of at the writer) makes the error
- * unambiguous and close to where the caller's data comes from.
- */
-function assertPlain(value: object, path: string): Node {
-  const proto = Object.getPrototypeOf(value);
-  if (proto !== Object.prototype && proto !== null) {
-    const typeName = (value as { constructor?: { name?: string } }).constructor?.name ?? "object";
-    throw new XmlBuildError(`Unsupported value of type '${typeName}' at '${path}': expected a plain object`);
-  }
-  return value as Node;
 }

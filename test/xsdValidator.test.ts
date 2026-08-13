@@ -34,6 +34,21 @@ void describe('validateXml with known schemas', () => {
     assert.ok(result.errors.length > 0);
   });
 
+  void it('rejects a document larger than a custom maxXmlSize', async () => {
+    const doc = `<InvoiceData>${'<x/>'.repeat(5000)}</InvoiceData>`;
+    await assert.rejects(
+      () => validateXml(doc, XsdSchemaName.Data, 1024),
+      /XML payload too large/i,
+    );
+  });
+
+  void it('validates the same document when the limit is raised', async () => {
+    const doc = `<InvoiceData>${'<x/>'.repeat(5000)}</InvoiceData>`;
+    const result = await validateXml(doc, XsdSchemaName.Data, 1024 * 1024);
+    assert.equal(result.valid, false);
+    assert.ok(result.errors.length > 0);
+  });
+
 });
 
 

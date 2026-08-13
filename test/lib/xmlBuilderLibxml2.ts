@@ -20,12 +20,8 @@ import {
   COMMON_NS,
   validateXmlString,
 } from "../../src/parser/builder/xmlBuilderCommon.js";
-import { ApiRequestType } from "../../src/parser/builder.js";
+import { ApiRequestType, isApiRequestType } from "../../src/parser/builder.js";
 import { XmlBuildError } from "../../src/parser/shared/xmlParserCommon.js";
-
-function isApiRequestType(value: unknown): value is ApiRequestType {
-  return typeof value === "string" && value in ApiRequestType;
-}
 import { elementName, resolveNs, requireNs, type NsLookup } from "./wasmNsUtils.js";
 import { baseElements } from "../../src/parser/builder/stripMeta.js";
 
@@ -191,7 +187,7 @@ export async function buildApiRequestXmlLibxml2<T extends object>(
 
   setNamespaceDeclarations(root, obj);
 
-  const prefixed = addNamespacePrefix(obj, "common", ["header", "user"]) as Record<string, unknown>;
+  const prefixed = addNamespacePrefix(obj, "common", ["header", "user"], requestType) as Record<string, unknown>;
   const xml = serialize(doc, prefixed);
 
   await validateXmlString(xml, XsdSchemaName.InvoiceApi, requestType);

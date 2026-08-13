@@ -4,7 +4,7 @@ import { XsdSchemaName } from "../xsdPaths.js";
 import { DATA_NS, BASE_NS, API_NS, COMMON_NS, validateXmlString } from "./builder/xmlBuilderCommon.js";
 import { stripMeta, baseElements, type Node } from "./builder/stripMeta.js";
 import { addNamespacePrefix } from "./builder/namespacePrefix.js";
-import { XmlBuildError } from "./shared/xmlParserCommon.js";
+import { XmlBuildError, assertPlain } from "./shared/xmlParserCommon.js";
 
 const builder = new XMLBuilder({
   attributeNamePrefix: "@_",
@@ -72,8 +72,14 @@ export enum ApiRequestType {
   QueryTransactionStatusRequest = "QueryTransactionStatusRequest",
 }
 
-function isApiRequestType(value: unknown): value is ApiRequestType {
-  return typeof value === "string" && value in ApiRequestType;
+/**
+ * Value-based membership check: `value in ApiRequestType` would also match
+ * inherited object properties ("toString", "constructor", ...), letting
+ * arbitrary strings through the guard. Checking the enum's values keeps
+ * the guard correct even if enum keys and values ever diverge.
+ */
+export function isApiRequestType(value: unknown): value is ApiRequestType {
+  return typeof value === "string" && (Object.values(ApiRequestType) as string[]).includes(value);
 }
 
 export async function buildApiRequestXml<T extends object>(
@@ -83,6 +89,8 @@ export async function buildApiRequestXml<T extends object>(
   if (!isApiRequestType(requestType)) {
     throw new XmlBuildError(`Unknown API request type: '${String(requestType)}'`);
   }
+
+  assertPlain(data, String(requestType));
 
   // The namespace declarations are fixed by the OSA API, the caller must
   // not supply them; the spread keeps ours authoritative.
@@ -94,7 +102,7 @@ export async function buildApiRequestXml<T extends object>(
 
   // header and user are the only common-namespace subtrees of every API
   // request, the rest of the elements live in the api namespace.
-  const prefixed = addNamespacePrefix(dataToBuild, "common", ["header", "user"]);
+  const prefixed = addNamespacePrefix(dataToBuild, "common", ["header", "user"], String(requestType));
 
   const xml = builder.build({
     [requestType]: prefixed,

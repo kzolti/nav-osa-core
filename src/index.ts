@@ -1,6 +1,6 @@
 export { xmlParserLibxml2 as xmlParser, xmlParserLibxml2 as parseXml } from './parser/parser.js';
-export { XmlValidationError } from './parser/parser.js';
-export type { XmlParserOptions } from './parser/parser.js';
+export { XmlValidationError } from './parser/shared/xmlParserCommon.js';
+export type { XmlParserOptions } from './parser/shared/xmlParserCommon.js';
 export { validateXml } from './parser/validator.js';
 export type { ValidationResult } from './parser/validator.js';
 export { validateAndExtractFields, extractFieldsFast } from './parser/extractor/xmlFieldExtractor.js';

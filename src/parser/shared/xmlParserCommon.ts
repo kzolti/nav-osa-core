@@ -35,7 +35,7 @@ export const ALWAYS_ARRAY: ReadonlySet<string> = new Set([
   "newCreatedLines",
 ]);
 
-export const BOOLEAN_FIELDS: ReadonlySet<string> = new Set([
+const BOOLEAN_FIELDS: ReadonlySet<string> = new Set([
   "completenessIndicator",
   "modifyWithoutMaster",
   "individualExemption",
@@ -59,7 +59,7 @@ export const BOOLEAN_FIELDS: ReadonlySet<string> = new Set([
   "invoiceCheckResult",
 ]);
 
-export const STRING_FIELDS: ReadonlySet<string> = new Set([
+const STRING_FIELDS: ReadonlySet<string> = new Set([
   "supplierTaxNumber",
   "customerTaxNumber",
   "supplierGroupMemberTaxNumber",
@@ -73,7 +73,7 @@ export const STRING_FIELDS: ReadonlySet<string> = new Set([
   "countyCode",
 ]);
 
-export const NUMBER_FIELDS: ReadonlySet<string> = new Set([
+const NUMBER_FIELDS: ReadonlySet<string> = new Set([
   "lineNumber",
   "lineNumberReference",
   "modificationIndex",
@@ -118,11 +118,13 @@ export class XmlValidationError extends Error {
 }
 
 /**
- * Guards against circular references when walking input objects:
- * real invoices nest ~15 levels, so anything beyond this means the
- * input is not a tree.
+ * Guards against circular references and runaway recursion when walking
+ * input objects and DOM trees. This package only handles NAV OSA 3.0
+ * documents: per the official XSDs these nest at most ~15 levels, so 50
+ * is a generous ceiling that legitimate input never reaches, while it
+ * keeps recursion bounded (and cheap) even for hostile input.
  */
-export const MAX_BUILD_DEPTH = 500;
+export const MAX_BUILD_DEPTH = 50;
 
 /**
  * Thrown when input data cannot be represented as XML: circular
@@ -137,7 +139,34 @@ export class XmlBuildError extends Error {
   }
 }
 
-export const DEFAULT_MAX_XML_SIZE = 10 * 1024 * 1024;
+export type Node = Record<string, unknown>;
+
+/**
+ * Rejects values that cannot be serialized to XML content: functions and
+ * non-plain objects (Date, Map, Set, class instances). Throwing here —
+ * instead of at the writer — keeps the error unambiguous and close to the
+ * caller's data. The guard is a single `typeof` comparison for scalars and
+ * one prototype lookup for objects.
+ */
+export function assertPlain(value: unknown, path: string): asserts value is Node {
+  if (typeof value === "function") {
+    throw new XmlBuildError(
+      `Unsupported value of type 'function' at '${path}': expected a plain object`,
+    );
+  }
+  if (typeof value !== "object" || value === null) {
+    return;
+  }
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) {
+    const typeName = (value as { constructor?: { name?: string } }).constructor?.name ?? "object";
+    throw new XmlBuildError(
+      `Unsupported value of type '${typeName}' at '${path}': expected a plain object`,
+    );
+  }
+}
+
+const DEFAULT_MAX_XML_SIZE = 10 * 1024 * 1024;
 
 export function assertXmlSize(xmlData: string, maxXmlSize?: number): void {
   const limit = maxXmlSize ?? DEFAULT_MAX_XML_SIZE;

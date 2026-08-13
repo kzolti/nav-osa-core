@@ -11,14 +11,14 @@ import { ALWAYS_ARRAY, XmlValidationError, assertXmlSize, convertTagValue, MAX_B
 import { ELEMENT_NODE, TEXT_NODE, CDATA_NODE, PARSE_OPTION, xmlDocPtr } from "./parser/wasmConstants.js";
 import type { XmlParserOptions } from "./shared/xmlParserCommon.js";
 
-export { XmlValidationError } from "./shared/xmlParserCommon.js";
-export type { XmlParserOptions } from "./shared/xmlParserCommon.js";
-
 type XmlNode = Record<string, unknown>;
 
 function convertPtr(ptr: number, depth = 0): unknown {
   if (depth > MAX_BUILD_DEPTH) {
-    throw new Error(`XML document too deeply nested (depth > ${MAX_BUILD_DEPTH})`);
+    throw new XmlValidationError(
+      `XML document too deeply nested (depth > ${MAX_BUILD_DEPTH})`,
+      [`maximum supported nesting depth is ${MAX_BUILD_DEPTH}`],
+    );
   }
   let text = "";
   let child: number | null = null;

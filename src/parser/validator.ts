@@ -34,6 +34,11 @@ export async function getLibxml2(): Promise<Libxml2ModuleType> {
     libxml2Module = mod;
     return mod;
   })();
+  // A failed load must not be cached forever: reset the promise so the
+  // next call retries (same pattern as validatorPromiseCache below).
+  libxml2Promise.catch(() => {
+    libxml2Promise = null;
+  });
   return libxml2Promise;
 }
 
@@ -81,8 +86,15 @@ function extractErrors(err: unknown, libxml2: Libxml2ModuleType): string[] {
   return [err instanceof Error ? err.message : String(err)];
 }
 
-export async function validateXml(xmlData: string, schema: XsdSchemaName): Promise<ValidationResult> {
-  assertXmlSize(xmlData);
+export async function validateXml(
+  xmlData: string,
+  schema: XsdSchemaName,
+  maxXmlSize?: number,
+): Promise<ValidationResult> {
+  // The default limit is the shared DEFAULT_MAX_XML_SIZE, so raising the
+  // default automatically applies here too; callers can override it
+  // per-call, matching the parser and the extractor.
+  assertXmlSize(xmlData, maxXmlSize);
   const validator = await getValidator(schema);
   const libxml2 = await getLibxml2();
   let xmlDoc: XmlDocType | null = null;
