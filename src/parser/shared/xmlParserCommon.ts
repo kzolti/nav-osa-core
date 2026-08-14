@@ -33,9 +33,16 @@ export const ALWAYS_ARRAY: ReadonlySet<string> = new Set([
   "transaction",
   "invoiceChainElement",
   "newCreatedLines",
+  "notification",
 ]);
 
-const BOOLEAN_FIELDS: ReadonlySet<string> = new Set([
+/**
+ * @internal
+ * Fields converted to booleans by {@link convertTagValue}. Exported for the
+ * XSD-consistency test (test/xsd-field-set-consistency.test.ts); keep in sync
+ * with the `xs:boolean` elements of src/xsd/*.xsd.
+ */
+export const BOOLEAN_FIELDS: ReadonlySet<string> = new Set([
   "completenessIndicator",
   "modifyWithoutMaster",
   "individualExemption",
@@ -44,6 +51,7 @@ const BOOLEAN_FIELDS: ReadonlySet<string> = new Set([
   "utilitySettlementIndicator",
   "selfBillingIndicator",
   "cashAccountingIndicator",
+  "compressedContent",
   "compressedContentIndicator",
   "mergedItemIndicator",
   "lineExpressionIndicator",
@@ -57,9 +65,17 @@ const BOOLEAN_FIELDS: ReadonlySet<string> = new Set([
   "airCargo",
   "advanceIndicator",
   "invoiceCheckResult",
+  "returnOriginalRequest",
+  "taxpayerValidity",
+  "technicalAnnulment",
 ]);
 
-const STRING_FIELDS: ReadonlySet<string> = new Set([
+/**
+ * @internal
+ * Fields that must stay strings even though they are (or look) numeric —
+ * tax numbers and codes. Exported for the XSD-consistency test.
+ */
+export const STRING_FIELDS: ReadonlySet<string> = new Set([
   "supplierTaxNumber",
   "customerTaxNumber",
   "supplierGroupMemberTaxNumber",
@@ -73,9 +89,15 @@ const STRING_FIELDS: ReadonlySet<string> = new Set([
   "countyCode",
 ]);
 
-const NUMBER_FIELDS: ReadonlySet<string> = new Set([
+/**
+ * @internal
+ * Fields converted to numbers by {@link convertTagValue} (integer-typed in
+ * the XSDs). Exported for the XSD-consistency test.
+ */
+export const NUMBER_FIELDS: ReadonlySet<string> = new Set([
   "lineNumber",
   "lineNumberReference",
+  "referenceToOtherLine",
   "modificationIndex",
   "batchIndex",
   "engineCapacity",
@@ -164,6 +186,34 @@ export function assertPlain(value: unknown, path: string): asserts value is Node
       `Unsupported value of type '${typeName}' at '${path}': expected a plain object`,
     );
   }
+}
+
+/**
+ * Single guard for recursive builder walks: combines the circular-reference
+ * ceiling (MAX_BUILD_DEPTH) with the plain-object check that
+ * {@link assertPlain} enforces, so each recursion level needs one call
+ * instead of inlining both. Arrays are exempt here — callers iterate and
+ * check their items individually, so a naive caller passing an array gets
+ * only the array itself skipped (its nested objects stay unchecked). Use it
+ * from a walker that recurses into array items, never on a bare array.
+ * `context` only varies the error message ("invoice data" vs "API request
+ * data").
+ */
+export function assertSerializable(
+  value: unknown,
+  path: string,
+  depth: number,
+  context = "API request data",
+): asserts value is Node {
+  if (depth > MAX_BUILD_DEPTH) {
+    throw new XmlBuildError(
+      `Circular reference or too-deep nesting in ${context} near '${path}' (depth > ${MAX_BUILD_DEPTH})`,
+    );
+  }
+  if (Array.isArray(value)) {
+    return;
+  }
+  assertPlain(value, path);
 }
 
 const DEFAULT_MAX_XML_SIZE = 10 * 1024 * 1024;

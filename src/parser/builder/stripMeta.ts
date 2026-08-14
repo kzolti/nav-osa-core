@@ -1,4 +1,4 @@
-import { MAX_BUILD_DEPTH, XmlBuildError, assertPlain, type Node } from "../shared/xmlParserCommon.js";
+import { assertSerializable, assertPlain, type Node } from "../shared/xmlParserCommon.js";
 
 /** Elements that belong to the base namespace per the OSA XSD (ala-address, tax number etc.). */
 const BASE_ELEMENTS = [
@@ -19,10 +19,7 @@ export type { Node } from "../shared/xmlParserCommon.js";
  * clear XmlBuildError instead of a stack overflow.
  */
 export function stripMeta(obj: Node, depth = 0, path = "InvoiceData"): Node {
-  if (depth > MAX_BUILD_DEPTH) {
-    throw new XmlBuildError(`Circular reference or too-deep nesting in invoice data near '${path}' (depth > ${MAX_BUILD_DEPTH})`);
-  }
-  assertPlain(obj, path);
+  assertSerializable(obj, path, depth, "invoice data");
   const clean: Node = {};
   for (const [key, value] of Object.entries(obj)) {
     if (key.startsWith("@_")) continue;

@@ -39,7 +39,7 @@ const result = await parseXml<{ InvoiceData: InvoiceData }>(xmlString, XsdSchema
 const resultNoValidation = await parseXml(xmlString, XsdSchemaName.Data, { validate: false });
 ```
 
-If validation fails, a detailed `XmlValidationError` is thrown:
+If validation fails, a detailed `XmlValidationError` is thrown; a document without a root element also throws `XmlValidationError` instead of returning an empty object:
 
 ```typescript
 import { XmlValidationError } from 'nav-osa-core';

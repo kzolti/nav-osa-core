@@ -9,6 +9,13 @@ import {
 } from "libxml2-wasm/lib/libxml2.mjs";
 
 /**
+ * Queue growth factor for the BFS traversal. OSA 3.0 documents stay far
+ * below a few thousand elements, so a modest geometric growth keeps memory
+ * waste down without reallocating on every child.
+ */
+const GROWTH_FACTOR = 1.5;
+
+/**
  * BFS traversal directly on the WASM pointers: reads only the requested
  * fields from the DOM, completely skipping the full object build (string
  * copies between WASM and V8). The first hit is a string, repeated
@@ -24,31 +31,42 @@ export function extractFieldsFast(
   let head = 0;
   let tail = 1;
 
-  while (head < tail) {
-    const ptr = queue[head++];
-    const name = XmlTreeCommonStruct.name_(ptr);
+  try {
+    while (head < tail) {
+      const ptr = queue[head++];
+      const name = XmlTreeCommonStruct.name_(ptr);
 
-    if (fieldNames.has(name)) {
-      const content = xmlNodeGetContent(ptr);
-      if (fields[name] === undefined) {
-        fields[name] = content;
-      } else if (Array.isArray(fields[name])) {
-        (fields[name] as string[]).push(content);
-      } else {
-        fields[name] = [fields[name] as string, content];
-      }
-    }
-
-    for (let child = XmlTreeCommonStruct.children(ptr); child; child = XmlTreeCommonStruct.next(child)) {
-      if (XmlTreeCommonStruct.type(child) === ELEMENT_NODE) {
-        if (tail === queue.length) {
-          const bigger = new Int32Array(queue.length * 2);
-          bigger.set(queue);
-          queue = bigger;
+      if (fieldNames.has(name)) {
+        const content = xmlNodeGetContent(ptr);
+        if (fields[name] === undefined) {
+          fields[name] = content;
+        } else if (Array.isArray(fields[name])) {
+          (fields[name] as string[]).push(content);
+        } else {
+          fields[name] = [fields[name] as string, content];
         }
-        queue[tail++] = child;
+      }
+
+      for (let child = XmlTreeCommonStruct.children(ptr); child; child = XmlTreeCommonStruct.next(child)) {
+        if (XmlTreeCommonStruct.type(child) === ELEMENT_NODE) {
+          if (tail === queue.length) {
+            const bigger = new Int32Array(Math.ceil(queue.length * GROWTH_FACTOR));
+            bigger.set(queue);
+            queue = bigger;
+          }
+          queue[tail++] = child;
+        }
       }
     }
+  } catch (err: unknown) {
+    // The pointers come from a validated, still-alive XmlDocument, so a
+    // failure here indicates a libxml2-wasm issue or memory corruption —
+    // never swallow it into an empty result (silent data loss). Rethrow
+    // with context so the caller can distinguish it from validation errors.
+    throw new Error(
+      "libxml2-wasm pointer traversal failed during field extraction",
+      { cause: err },
+    );
   }
 
   return fields;

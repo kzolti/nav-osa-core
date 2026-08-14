@@ -40,7 +40,7 @@ void describe('buildApiRequestXml', () => {
     assert.ok(xml.includes('<common:requestId>'));
     assert.ok(xml.includes('<common:user>'));
     assert.ok(xml.includes('<software>'));
-    assert.ok(!xml.includes('common:software'));
+    assert.doesNotMatch(xml, /common:software/);
     assert.ok(xml.includes('xmlns="http://schemas.nav.gov.hu/OSA/3.0/api"'));
     assert.ok(xml.includes('xmlns:common="http://schemas.nav.gov.hu/NTCA/1.0/common"'));
   });

@@ -97,7 +97,11 @@ export async function xmlParserLibxml2<T>(
       throw new XmlValidationError(`XSD validation failed against ${schemaName}`, errors);
     }
     if (!doc) {
-      return {} as T;
+      // Unreachable today: validateXmlAndReturnDoc only returns a null doc
+      // together with a non-empty errors list. A null doc here signals that
+      // the validator contract changed — fail loudly instead of silently
+      // returning an empty object.
+      throw new Error("internal error: XSD validation succeeded without producing an XmlDocument");
     }
     xmlDoc = doc;
   } else {
@@ -119,11 +123,14 @@ export async function xmlParserLibxml2<T>(
 
   try {
     if (!xmlDoc) {
-      return {} as T;
+      throw new Error("internal error: no XmlDocument to parse");
     }
     const root = xmlDocGetRootElement(xmlDocPtr(xmlDoc));
     if (!root) {
-      return {} as T;
+      throw new XmlValidationError(
+        "XML document has no root element",
+        ["the document does not contain a root element"],
+      );
     }
     const result: XmlNode = {};
     result[XmlTreeCommonStruct.name_(root)] = convertPtr(root);

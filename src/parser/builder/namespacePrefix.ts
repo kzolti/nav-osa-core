@@ -1,4 +1,4 @@
-import { MAX_BUILD_DEPTH, XmlBuildError, assertPlain } from "../shared/xmlParserCommon.js";
+import { assertSerializable, assertPlain } from "../shared/xmlParserCommon.js";
 
 type ObjMap = Record<string, unknown>;
 
@@ -9,11 +9,7 @@ function prefixValue(
   depth: number,
   path: string,
 ): unknown {
-  if (depth > MAX_BUILD_DEPTH) {
-    throw new XmlBuildError(
-      `Circular reference or too-deep nesting in API request data (depth > ${MAX_BUILD_DEPTH})`,
-    );
-  }
+  assertSerializable(value, path, depth);
   if (Array.isArray(value)) {
     return value.map((item, i) => {
       if (item === null || typeof item !== "object") {
@@ -24,10 +20,8 @@ function prefixValue(
     });
   }
   if (typeof value === "object" && value !== null) {
-    assertPlain(value, path);
     return prefixObject(value, prefix, shouldPrefix, depth + 1, path);
   }
-  assertPlain(value, path);
   return value;
 }
 
@@ -58,16 +52,10 @@ function prefixObject(
 /**
  * Guards a subtree without copying it: non-rootKey values of an API
  * request are passed through untouched (reference-identical), but every
- * nested value still gets the plain-object/function check. The depth
- * guard matches prefixValue — circular input here must not overflow the
- * stack either.
+ * nested value still gets the serializable/depth check.
  */
 function assertSerializableTree(value: unknown, path: string, depth = 0): void {
-  if (depth > MAX_BUILD_DEPTH) {
-    throw new XmlBuildError(
-      `Circular reference or too-deep nesting in API request data (depth > ${MAX_BUILD_DEPTH})`,
-    );
-  }
+  assertSerializable(value, path, depth);
   if (Array.isArray(value)) {
     for (let i = 0; i < value.length; i++) {
       const item = value[i];
@@ -80,10 +68,8 @@ function assertSerializableTree(value: unknown, path: string, depth = 0): void {
     return;
   }
   if (typeof value !== "object" || value === null) {
-    assertPlain(value, path);
     return;
   }
-  assertPlain(value, path);
   for (const key in value) {
     if (Object.prototype.hasOwnProperty.call(value, key)) {
       const child = (value as ObjMap)[key];
