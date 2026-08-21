@@ -1,6 +1,6 @@
 {
   "name": "nav-osa-core",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "type": "module",
   "description": "Shared TypeScript types, XML parser, XSD validator, and XML builder for the Hungarian NAV Online Invoice System (OSA)",
   "main": "build/index.js",
@@ -68,6 +68,6 @@
     "libxml2-wasm": "^0.7.1"
   },
   "peerDependencies": {
-    "nav-osa-types": "^2.0.0"
+    "nav-osa-types": "^2.0.1"
   }
 }
