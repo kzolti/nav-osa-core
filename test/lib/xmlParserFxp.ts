@@ -1,8 +1,11 @@
 import { XMLParser } from "fast-xml-parser";
 import { validateXml, ValidationResult } from "../../src/parser/validator.js";
 import { XsdSchemaName } from "../../src/xsdPaths.js";
-import { ALWAYS_ARRAY, XmlValidationError, assertXmlSize, convertTagValue } from "../../src/parser/shared/xmlParserCommon.js";
-import type { XmlParserOptions } from "../../src/parser/shared/xmlParserCommon.js";
+import { ALWAYS_ARRAY } from "../../src/parser/shared/fieldSets.js";
+import { XmlValidationError } from "../../src/parser/shared/errors.js";
+import { assertXmlSize } from "../../src/parser/shared/guards.js";
+import { convertTagValue } from "../../src/parser/shared/convert.js";
+import type { XmlParserOptions } from "../../src/parser/shared/guards.js";
 
 function tagValueProcessor(tagName: string, tagValue: unknown): unknown {
   if (typeof tagValue !== "string") return tagValue;

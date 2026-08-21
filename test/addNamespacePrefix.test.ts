@@ -49,7 +49,7 @@ void describe('addNamespacePrefix', () => {
     assert.ok('common:user' in result);
     assert.equal((result as Record<string, Record<string, string>>)['common:user']['common:login'], 'u1');
     assert.ok('software' in result);
-    assert.equal((result as Record<string, Record<string, unknown>>).software, input.software);
+    assert.deepEqual((result as Record<string, Record<string, unknown>>).software, input.software as Record<string, unknown>);
   });
 
   void it('does not mutate the original object', () => {

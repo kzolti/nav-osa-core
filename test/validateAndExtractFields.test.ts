@@ -53,12 +53,12 @@ void describe('validateAndExtractFields', () => {
     );
   });
 
-  void it('returns errors instead of throwing with errorOnInvalid: false', async () => {
+  void it('returns errors instead of throwing with errorMode: return', async () => {
     const result = await validateAndExtractFields(
       '<root><bad/></root>',
       XsdSchemaName.Data,
       ['invoiceNumber'],
-      { errorOnInvalid: false }
+      { errorMode: 'return' }
     );
     assert.ok(result.errors.length > 0);
     assert.deepEqual(result.fields, {});

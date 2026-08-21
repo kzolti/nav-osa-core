@@ -1,9 +1,9 @@
 import { XmlDocument, XmlElement } from "libxml2-wasm";
 import { getLibxml2, validateXml } from "../../src/parser/validator.js";
 import { XsdSchemaName } from "../../src/xsdPaths.js";
-import { XmlValidationError } from "../../src/parser/shared/xmlParserCommon.js";
+import { XmlValidationError } from "../../src/parser/shared/errors.js";
 import { addNamespacePrefix } from "../../src/parser/builder/namespacePrefix.js";
-import { stripMeta, type Node } from "../../src/parser/builder/stripMeta.js";
+import { stripMeta, type Node } from "./stripMeta.js";
 import { xmlDocPtr } from "../../src/parser/parser/wasmConstants.js";
 import {
   xmlAddChild,
@@ -21,9 +21,9 @@ import {
   validateXmlString,
 } from "../../src/parser/builder/xmlBuilderCommon.js";
 import { ApiRequestType, isApiRequestType } from "../../src/parser/builder.js";
-import { XmlBuildError } from "../../src/parser/shared/xmlParserCommon.js";
+import { XmlBuildError } from "../../src/parser/shared/errors.js";
 import { elementName, resolveNs, requireNs, type NsLookup } from "./wasmNsUtils.js";
-import { baseElements } from "../../src/parser/builder/stripMeta.js";
+import { baseElements } from "../../src/parser/builder/baseElements.js";
 
 function makeLookup(docPtr: number, rootPtr: number): NsLookup {
   return {

@@ -1,8 +1,4 @@
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { resolve } from 'node:path';
 
 export enum XsdSchemaName {
   Common = 'common',
@@ -12,5 +8,5 @@ export enum XsdSchemaName {
 }
 
 export function getXsdPath(schemaName: XsdSchemaName): string {
-  return resolve(__dirname, 'xsd', `${schemaName}.xsd`);
+  return resolve(import.meta.dirname!, 'xsd', `${schemaName}.xsd`);
 }

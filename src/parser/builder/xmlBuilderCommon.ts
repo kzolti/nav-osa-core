@@ -1,5 +1,5 @@
 import { XsdSchemaName } from "../../xsdPaths.js";
-import { XmlValidationError } from "../shared/xmlParserCommon.js";
+import { XmlValidationError } from "../shared/errors.js";
 import { validateXml } from "../validator.js";
 
 export const DATA_NS = "http://schemas.nav.gov.hu/OSA/3.0/data";

@@ -1,5 +1,10 @@
-import { ParseOption, XmlDocument } from "libxml2-wasm";
+import type { XmlDocument } from "libxml2-wasm";
 
+// libxml2 xmlElementType values for node-type dispatch during WASM
+// traversal. These are stable C enum values (XML_ELEMENT_NODE = 1,
+// XML_TEXT_NODE = 3, XML_CDATA_SECTION_NODE = 4); libxml2-wasm only exposes
+// them as `XmlNodeStruct.Type`, which is not worth an async module load for
+// three well-known constants.
 export const ELEMENT_NODE = 1;
 export const TEXT_NODE = 3;
 export const CDATA_NODE = 4;
@@ -12,11 +17,3 @@ export function xmlDocPtr(doc: InstanceType<typeof XmlDocument>): number {
   }
   return ptr;
 }
-
-/**
- * Default parse options: maximum safety — entity resolution (NOENT) and
- * internal limit relaxation (HUGE) are excluded; only an explicit
- * `processEntities: true` enables XML_PARSE_NOENT.
- */
-export const PARSE_OPTION =
-  ParseOption.XML_PARSE_NOBLANKS | ParseOption.XML_PARSE_NONET;

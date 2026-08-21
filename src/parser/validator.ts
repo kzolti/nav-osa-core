@@ -2,53 +2,16 @@ import type { XmlDocument, XsdValidator } from 'libxml2-wasm';
 import { resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { XsdSchemaName, getXsdPath } from '../xsdPaths.js';
-import { assertXmlSize } from './shared/xmlParserCommon.js';
+import { assertXmlSize } from './shared/guards.js';
+import { getLibxml2, getParseOption } from './runtime/libxml2.js';
+import type { Libxml2ModuleType } from './runtime/libxml2.js';
 
-type Libxml2ModuleType = typeof import('libxml2-wasm');
+export { getLibxml2 } from './runtime/libxml2.js';
+
 type XmlDocType = InstanceType<typeof XmlDocument>;
 type XsdValidatorType = InstanceType<typeof XsdValidator>;
 
-/** Non-literal import specifiers: bundlers cannot statically resolve them,
- * Node always resolves them relative to this module. */
-const LIBXML2_SPEC = 'libxml2-wasm';
-const LIBXML2_NODEJS_SPEC = 'libxml2-wasm/lib/nodejs.mjs';
-
-let libxml2Module: Libxml2ModuleType | null = null;
-let libxml2Promise: Promise<Libxml2ModuleType> | null = null;
 const validatorPromiseCache = new Map<XsdSchemaName, Promise<XsdValidatorType>>();
-
-export async function getLibxml2(): Promise<Libxml2ModuleType> {
-  if (libxml2Module) {
-    return libxml2Module;
-  }
-  if (libxml2Promise) {
-    return libxml2Promise;
-  }
-  libxml2Promise = (async () => {
-    // Direct import() with a NON-literal specifier: a direct import always
-    // resolves relative to THIS module — the same copy the static imports in
-    // xmlFieldExtractor use, so the XSD validator and the field extraction
-    // share one WASM instance (mixing instances makes every xmlNode* read
-    // return garbage). The non-literal specifier still prevents bundlers
-    // (webpack/vite) from statically resolving the specifier.
-    const mod: Libxml2ModuleType = await import(LIBXML2_SPEC);
-    try {
-      // Same reason for importing the nodejs.mjs FS provider.
-      const { xmlRegisterFsInputProviders } = await import(LIBXML2_NODEJS_SPEC);
-      xmlRegisterFsInputProviders();
-    } catch {
-      // Fallback: FS provider unavailable
-    }
-    libxml2Module = mod;
-    return mod;
-  })();
-  // A failed load must not be cached forever: reset the promise so the
-  // next call retries (same pattern as getValidator's promise cache).
-  libxml2Promise.catch(() => {
-    libxml2Promise = null;
-  });
-  return libxml2Promise;
-}
 
 async function getValidator(schema: XsdSchemaName): Promise<XsdValidatorType> {
   let promise = validatorPromiseCache.get(schema);
@@ -78,7 +41,7 @@ async function getValidator(schema: XsdSchemaName): Promise<XsdValidatorType> {
     }
   })();
   validatorPromiseCache.set(schema, promise);
-  promise.catch(() => validatorPromiseCache.delete(schema));
+  void promise.catch(() => validatorPromiseCache.delete(schema));
   return promise;
 }
 
@@ -94,29 +57,39 @@ function extractErrors(err: unknown, libxml2: Libxml2ModuleType): string[] {
   return [err instanceof Error ? err.message : String(err)];
 }
 
-export async function validateXml(
+async function parseAndValidate(
   xmlData: string,
   schema: XsdSchemaName,
+  parseOption: number,
   maxXmlSize?: number,
-): Promise<ValidationResult> {
-  // The default limit is the shared DEFAULT_MAX_XML_SIZE, so raising the
-  // default automatically applies here too; callers can override it
-  // per-call, matching the parser and the extractor.
+): Promise<{ doc: XmlDocType | null; errors: string[]; libxml2: Libxml2ModuleType }> {
   assertXmlSize(xmlData, maxXmlSize);
   const validator = await getValidator(schema);
   const libxml2 = await getLibxml2();
   let xmlDoc: XmlDocType | null = null;
   try {
-    xmlDoc = libxml2.XmlDocument.fromString(xmlData, {
-      option: libxml2.ParseOption.XML_PARSE_NOBLANKS | libxml2.ParseOption.XML_PARSE_NONET,
-    });
+    xmlDoc = libxml2.XmlDocument.fromString(xmlData, { option: parseOption });
     validator.validate(xmlDoc);
-    return { valid: true, errors: [] };
+    return { doc: xmlDoc, errors: [], libxml2 };
   } catch (err: unknown) {
-    return { valid: false, errors: extractErrors(err, libxml2) };
-  } finally {
     xmlDoc?.dispose();
+    return { doc: null, errors: extractErrors(err, libxml2), libxml2 };
   }
+}
+
+export interface ValidateXmlOptions {
+  /** XML size limit in bytes. Default: 10 MB. */
+  maxXmlSize?: number;
+}
+
+export async function validateXml(
+  xmlData: string,
+  schema: XsdSchemaName,
+  options?: ValidateXmlOptions,
+): Promise<ValidationResult> {
+  const { doc, errors } = await parseAndValidate(xmlData, schema, await getParseOption(), options?.maxXmlSize);
+  doc?.dispose();
+  return errors.length === 0 ? { valid: true, errors: [] } : { valid: false, errors };
 }
 
 /**
@@ -131,16 +104,6 @@ export async function validateXmlAndReturnDoc(
   parseOption: number,
   maxXmlSize?: number,
 ): Promise<{ doc: XmlDocType | null; errors: string[] }> {
-  assertXmlSize(xmlData, maxXmlSize);
-  const validator = await getValidator(schema);
-  const libxml2 = await getLibxml2();
-  let xmlDoc: XmlDocType | null = null;
-  try {
-    xmlDoc = libxml2.XmlDocument.fromString(xmlData, { option: parseOption });
-    validator.validate(xmlDoc);
-    return { doc: xmlDoc, errors: [] };
-  } catch (err: unknown) {
-    xmlDoc?.dispose();
-    return { doc: null, errors: extractErrors(err, libxml2) };
-  }
+  const { doc, errors } = await parseAndValidate(xmlData, schema, parseOption, maxXmlSize);
+  return { doc, errors };
 }

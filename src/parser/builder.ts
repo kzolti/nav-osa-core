@@ -2,49 +2,52 @@ import XMLBuilder from "fast-xml-builder";
 import { InvoiceData } from "nav-osa-types";
 import { XsdSchemaName } from "../xsdPaths.js";
 import { DATA_NS, BASE_NS, API_NS, COMMON_NS, validateXmlString } from "./builder/xmlBuilderCommon.js";
-import { stripMeta, baseElements, type Node } from "./builder/stripMeta.js";
+import { baseElements } from "./builder/baseElements.js";
 import { addNamespacePrefix } from "./builder/namespacePrefix.js";
-import { XmlBuildError, assertPlain } from "./shared/xmlParserCommon.js";
+import { XmlBuildError } from "./shared/errors.js";
+import { assertPlain } from "./shared/guards.js";
+import type { Node } from "./shared/guards.js";
+import { transformKeys } from "./shared/objectTraversal.js";
 
-const builder = new XMLBuilder({
-  attributeNamePrefix: "@_",
-  textNodeName: "#text",
-  ignoreAttributes: false,
-  format: true,
-  indentBy: "\t",
-  suppressEmptyNode: false,
-});
+let builder: InstanceType<typeof XMLBuilder> | null = null;
+
+/** Lazy XMLBuilder factory: the singleton is created on first use, not at import time. */
+function getBuilder(): InstanceType<typeof XMLBuilder> {
+  if (!builder) {
+    builder = new XMLBuilder({
+      attributeNamePrefix: "@_",
+      textNodeName: "#text",
+      ignoreAttributes: false,
+      format: true,
+      indentBy: "\t",
+      suppressEmptyNode: false,
+    });
+  }
+  return builder;
+}
 
 /**
- * Renames the base-namespace element keys to "base:<name>" so the builder
- * writes the QName directly — no regex post-processing is needed. The
- * base elements form closed subtrees in the OSA XSD, therefore the
- * recursive rename is equivalent to prefixing every matching element name
- * at any depth.
+ * Single-pass preparation: strips @_ meta keys and prefixes base-namespace
+ * keys in one traversal (avoids a separate filter + prefix double pass).
+ * Saves one full object allocation/copy per invoice (≈50-200 nodes).
  */
-function prefixBaseKeys(obj: Node): Node {
-  const out: Node = {};
-  for (const [key, value] of Object.entries(obj)) {
-    const newKey = baseElements.has(key) ? `base:${key}` : key;
-    if (Array.isArray(value)) {
-      out[newKey] = value.map((v) =>
-        v !== null && typeof v === "object" ? prefixBaseKeys(v as Node) : v,
-      );
-    } else if (value !== null && typeof value === "object") {
-      out[newKey] = prefixBaseKeys(value as Node);
-    } else {
-      out[newKey] = value;
-    }
-  }
-  return out;
+function prepareInvoiceData(obj: Node): Node {
+  return transformKeys(
+    obj,
+    (key) => (baseElements.has(key) ? `base:${key}` : key),
+    (key) => key.startsWith("@_"),
+    0,
+    "InvoiceData",
+    "invoice data",
+  );
 }
 
 export async function buildInvoiceXml(invoiceData: InvoiceData): Promise<string> {
-  const xml = builder.build({
+  const xml = getBuilder().build({
     InvoiceData: {
       "@_xmlns": DATA_NS,
       "@_xmlns:base": BASE_NS,
-      ...prefixBaseKeys(stripMeta(invoiceData as unknown as Node)),
+      ...prepareInvoiceData(invoiceData as unknown as Node),
     },
   });
 
@@ -104,7 +107,7 @@ export async function buildApiRequestXml<T extends object>(
   // request, the rest of the elements live in the api namespace.
   const prefixed = addNamespacePrefix(dataToBuild, "common", ["header", "user"], String(requestType));
 
-  const xml = builder.build({
+  const xml = getBuilder().build({
     [requestType]: prefixed,
   });
 

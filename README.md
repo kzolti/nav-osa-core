@@ -10,6 +10,7 @@ Shared TypeScript types, XML parser, XSD validator, and XML builder for the Hung
 - XML builders: `buildInvoiceXml` for invoice data, `buildApiRequestXml` for API request XML (built on `fast-xml-builder`)
 - XSD validation with built-in lazy validator cache (libxml2-wasm)
 - `validateAndExtractFields`: validate and extract only specific fields from the DOM without building the full parse object
+- `extractFields`: extract specific fields from well-formed XML without XSD validation
 
 ## Installation
 
@@ -32,11 +33,11 @@ import { InvoiceData, TaxNumberType, MonetaryType } from 'nav-osa-types';
 `schemaName` is **required** as the second argument — the XML is validated against that schema before parsing. Validation can be disabled with `validate: false`:
 
 ```typescript
-import { parseXml, XsdSchemaName } from 'nav-osa-core';
+import { xmlParser, XsdSchemaName } from 'nav-osa-core';
 import { InvoiceData } from 'nav-osa-types';
 
-const result = await parseXml<{ InvoiceData: InvoiceData }>(xmlString, XsdSchemaName.Data);
-const resultNoValidation = await parseXml(xmlString, XsdSchemaName.Data, { validate: false });
+const result = await xmlParser<{ InvoiceData: InvoiceData }>(xmlString, XsdSchemaName.Data);
+const resultNoValidation = await xmlParser(xmlString, XsdSchemaName.Data, { validate: false });
 ```
 
 If validation fails, a detailed `XmlValidationError` is thrown; a document without a root element also throws `XmlValidationError` instead of returning an empty object:
@@ -45,7 +46,7 @@ If validation fails, a detailed `XmlValidationError` is thrown; a document witho
 import { XmlValidationError } from 'nav-osa-core';
 
 try {
-  const result = await parseXml(xmlString, XsdSchemaName.Data);
+  const result = await xmlParser(xmlString, XsdSchemaName.Data);
 } catch (err) {
   if (err instanceof XmlValidationError) {
     console.log('Validation failed:', err.errors);
@@ -106,21 +107,49 @@ const { fields } = await validateAndExtractFields(
 ```
 
 The result type can also be narrowed via the generic parameter: `validateAndExtractFields<MyFieldShape>(...)`.
-- By default an invalid document throws `XmlValidationError`; pass `{ errorOnInvalid: false }` to get the results with an `errors` array instead:
+- By default an invalid document throws `XmlValidationError`; pass `{ errorMode: 'return' }` to get the results with an `errors` array instead:
 
 ```typescript
 const { fields, errors } = await validateAndExtractFields(
   xmlString,
   XsdSchemaName.Data,
   ['invoiceNumber'],
-  { errorOnInvalid: false }
+  { errorMode: 'return' }
 );
 if (errors.length > 0) {
   console.log('Validation failed:', errors);
 }
 ```
 
-The low-level `extractFieldsFast(rootPtr, fieldNames)` is also exported if you already hold a libxml2-wasm document pointer and want to walk it directly.
+The low-level `extractFieldsFast` BFS traversal is internal: it walks a raw libxml2-wasm document pointer and is not part of the public API.
+
+### Extract fields without XSD validation
+
+`extractFields` reads only the requested fields from **well-formed** XML — it does **no XSD validation**. It is namespace-agnostic and handles entities, CDATA, comments and whitespace via `libxml2-wasm`, making it a drop-in replacement for regexp-based helpers:
+
+```typescript
+import { extractFields } from 'nav-osa-core';
+
+const { fields, errors } = await extractFields(
+  xmlString,
+  ['invoiceNumber', 'originalInvoiceNumber'],
+);
+```
+
+It accepts the same options as `validateAndExtractFields` (`convertValues`, `maxXmlSize`, `errorMode`) and returns the same `{ fields, errors }` shape. On ill-formed XML it throws `XmlValidationError` by default; pass `{ errorMode: 'return' }` to get the errors in the `errors` array instead:
+
+```typescript
+const { fields, errors } = await extractFields(
+  xmlString,
+  ['invoiceNumber'],
+  { errorMode: 'return' },
+);
+if (errors.length > 0) {
+  console.log('Well-formedness check failed:', errors);
+}
+```
+
+Because it skips `XsdValidator.validate()` entirely, `extractFields` is ~30-40% faster than `validateAndExtractFields` when you only need well-formedness, not schema conformance.
 
 ### Build invoice XML from JSON
 
@@ -242,9 +271,9 @@ await buildApiRequestXml(ApiRequestType.TokenExchangeRequest, data);
 The parser keeps entity references unexpanded by default (`processEntities: false`): the `XML_PARSE_NOENT` flag is off, so internal entity expansion (billion laughs) is not processed and the built-in libxml2 safety limits stay active. If you need entity resolution for trusted XML, enable it explicitly:
 
 ```typescript
-import { parseXml, XsdSchemaName } from 'nav-osa-core';
+import { xmlParser, XsdSchemaName } from 'nav-osa-core';
 
-const result = await parseXml(xmlString, XsdSchemaName.Data, { processEntities: true });
+const result = await xmlParser(xmlString, XsdSchemaName.Data, { processEntities: true });
 ```
 
 **Warning:** Only enable entity processing when parsing XML you fully control. For external or untrusted input, keep the default — `XML_PARSE_NOENT` is what makes billion-laughs-style entity expansion possible.
@@ -254,9 +283,9 @@ const result = await parseXml(xmlString, XsdSchemaName.Data, { processEntities: 
 The parser rejects XML payloads larger than 10 MB by default. You can override this:
 
 ```typescript
-import { parseXml, XsdSchemaName } from 'nav-osa-core';
+import { xmlParser, XsdSchemaName } from 'nav-osa-core';
 
-const result = await parseXml(xmlString, XsdSchemaName.Data, { maxXmlSize: 50 * 1024 * 1024 });
+const result = await xmlParser(xmlString, XsdSchemaName.Data, { maxXmlSize: 50 * 1024 * 1024 });
 ```
 
 ## Security

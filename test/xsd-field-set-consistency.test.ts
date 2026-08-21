@@ -6,7 +6,7 @@ import {
   BOOLEAN_FIELDS,
   NUMBER_FIELDS,
   STRING_FIELDS,
-} from '../src/parser/shared/xmlParserCommon.js';
+} from '../src/parser/shared/fieldSets.js';
 
 const XSD_FILES = [
   'src/xsd/invoiceBase.xsd',
