@@ -8,6 +8,11 @@ type Libxml2ModuleType = typeof import('libxml2-wasm');
 type XmlDocType = InstanceType<typeof XmlDocument>;
 type XsdValidatorType = InstanceType<typeof XsdValidator>;
 
+/** Non-literal import specifiers: bundlers cannot statically resolve them,
+ * Node always resolves them relative to this module. */
+const LIBXML2_SPEC = 'libxml2-wasm';
+const LIBXML2_NODEJS_SPEC = 'libxml2-wasm/lib/nodejs.mjs';
+
 let libxml2Module: Libxml2ModuleType | null = null;
 let libxml2Promise: Promise<Libxml2ModuleType> | null = null;
 const validatorPromiseCache = new Map<XsdSchemaName, Promise<XsdValidatorType>>();
@@ -20,13 +25,16 @@ export async function getLibxml2(): Promise<Libxml2ModuleType> {
     return libxml2Promise;
   }
   libxml2Promise = (async () => {
-    // new Function: bundlers (webpack/vite) would statically resolve the
-    // "libxml2-wasm" import string, breaking the WASM module. The string is
-    // a constant, independent of user input — no eval risk.
-    const mod: Libxml2ModuleType = await new Function('return import("libxml2-wasm")')();
+    // Direct import() with a NON-literal specifier: a direct import always
+    // resolves relative to THIS module — the same copy the static imports in
+    // xmlFieldExtractor use, so the XSD validator and the field extraction
+    // share one WASM instance (mixing instances makes every xmlNode* read
+    // return garbage). The non-literal specifier still prevents bundlers
+    // (webpack/vite) from statically resolving the specifier.
+    const mod: Libxml2ModuleType = await import(LIBXML2_SPEC);
     try {
       // Same reason for importing the nodejs.mjs FS provider.
-      const { xmlRegisterFsInputProviders } = await new Function('return import("libxml2-wasm/lib/nodejs.mjs")')();
+      const { xmlRegisterFsInputProviders } = await import(LIBXML2_NODEJS_SPEC);
       xmlRegisterFsInputProviders();
     } catch {
       // Fallback: FS provider unavailable
