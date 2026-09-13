@@ -1,4 +1,5 @@
 export { xmlParserLibxml2 as xmlParser } from './parser/parser.js';
+export { xmlParserFxp } from './parser/parser-fxp.js';
 export { XmlValidationError, XmlBuildError } from './parser/shared/errors.js';
 export type { XmlParserOptions } from './parser/shared/guards.js';
 export { validateXml } from './parser/validator.js';
