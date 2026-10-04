@@ -23,6 +23,7 @@
   ],
   "scripts": {
     "build": "rm -rf build && tsc && cp -r src/xsd build/xsd",
+    "pretest": "node --import tsx test/generate-snapshots.ts",
     "test": "node --import tsx --test test/*.test.ts",
     "test:verbose": "node --import tsx --test --test-reporter=spec test/*.test.ts",
     "test:snapshots": "node --import tsx --test test/parser-snapshot.test.ts",
